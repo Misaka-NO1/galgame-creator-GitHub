@@ -121,6 +121,30 @@ Dialogue::SpecialEffect textToEffect(const QString &text)
     return Dialogue::SpecialEffect::None;
 }
 
+QStringList collectVoiceFilesByPrefix(const QString &projectPath, const QString &prefix)
+{
+    const QString trimmedPrefix = prefix.trimmed();
+    if (trimmedPrefix.isEmpty()) {
+        return {};
+    }
+
+    QDir voicesDir(QDir(projectPath).filePath("resources/voices"));
+    if (!voicesDir.exists()) {
+        return {};
+    }
+
+    const QStringList filters = {"*.wav", "*.ogg", "*.mp3", "*.flac", "*.m4a"};
+    const QFileInfoList files = voicesDir.entryInfoList(filters, QDir::Files, QDir::Name);
+
+    QStringList matched;
+    for (const QFileInfo &file : files) {
+        if (file.fileName().startsWith(trimmedPrefix, Qt::CaseInsensitive)) {
+            matched.append(file.fileName());
+        }
+    }
+    return matched;
+}
+
 } // namespace
 
 class DialogueTimelineModel final : public QAbstractListModel
@@ -283,14 +307,6 @@ void MainWindow::onTreeItemClicked(QTreeWidgetItem *item, int)
         return;
     }
 
-    if (itemType(item) == TreeItemType::Character) {
-        Character *character = valueToPtr<Character>(item->data(0, kTreePointerRole));
-        CharacterEditor dialog(character, m_projectPath, this);
-        if (dialog.exec() == QDialog::Accepted) {
-            emit dataChanged();
-        }
-    }
-
     refreshPropertyPage();
 
     if (itemType(item) == TreeItemType::Dialogue) {
@@ -399,6 +415,146 @@ void MainWindow::onAddDialogue()
     addDialogue();
 }
 
+void MainWindow::onBatchAddDialogues()
+{
+    if (!m_project) {
+        return;
+    }
+
+    const QList<Character *> characters = m_project->characters();
+    if (characters.isEmpty()) {
+        QMessageBox::information(this, "提示", "请先添加至少一个角色。");
+        return;
+    }
+
+    QDialog dialog(this);
+    dialog.setWindowTitle("批量生成对话");
+    dialog.resize(520, 420);
+
+    auto *characterCombo = new QComboBox(&dialog);
+    for (Character *character : characters) {
+        characterCombo->addItem(character->name(), character->id());
+    }
+
+    auto *countSpin = new QSpinBox(&dialog);
+    countSpin->setRange(1, 200);
+    countSpin->setValue(10);
+
+    auto *insertRowSpin = new QSpinBox(&dialog);
+    insertRowSpin->setRange(1, m_project->dialogueCount() + 1);
+    int defaultInsertRow = m_project->dialogueCount() + 1;
+    if (m_timelineView && m_timelineView->currentIndex().isValid()) {
+        defaultInsertRow = m_timelineView->currentIndex().row() + 2;
+    }
+    insertRowSpin->setValue(qBound(1, defaultInsertRow, m_project->dialogueCount() + 1));
+
+    auto *templateEdit = new QLineEdit(&dialog);
+    templateEdit->setPlaceholderText("例如：第 {n} 句测试文本（{n} 会替换为序号）");
+
+    auto *voicePrefixEdit = new QLineEdit(&dialog);
+    voicePrefixEdit->setPlaceholderText("可选：语音名前缀，如 test_");
+    if (!characters.isEmpty()) {
+        voicePrefixEdit->setText(characters.first()->voicePrefix());
+    }
+
+    auto *linesEdit = new QTextEdit(&dialog);
+    linesEdit->setPlaceholderText("按行导入台词：每行一条。\n若填写此区域，将优先按行生成并忽略“生成数量/文本模板”。");
+
+    auto *form = new QFormLayout();
+    form->addRow("角色", characterCombo);
+    form->addRow("插入行号(从1开始)", insertRowSpin);
+    form->addRow("生成数量", countSpin);
+    form->addRow("文本模板", templateEdit);
+    form->addRow("语音前缀", voicePrefixEdit);
+    form->addRow("按行导入", linesEdit);
+
+    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+
+    auto *layout = new QVBoxLayout(&dialog);
+    layout->addLayout(form);
+    layout->addWidget(buttons);
+
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+
+    const QString charId = characterCombo->currentData().toString();
+    int count = countSpin->value();
+    const int requestedInsertRow = insertRowSpin->value();
+    int insertIndex = qBound(0, requestedInsertRow - 1, m_project->dialogueCount());
+    const QString textTemplate = templateEdit->text().trimmed();
+    QString voicePrefix = voicePrefixEdit->text().trimmed();
+    if (voicePrefix.isEmpty()) {
+        if (const Character *selectedChar = m_project->getCharacter(charId)) {
+            voicePrefix = selectedChar->voicePrefix().trimmed();
+        }
+    }
+    const QString linesText = linesEdit->toPlainText();
+    const QStringList matchedVoiceFiles = collectVoiceFilesByPrefix(m_projectPath, voicePrefix);
+
+    QStringList importedLines;
+    for (const QString &line : linesText.split('\n')) {
+        const QString trimmed = line.trimmed();
+        if (!trimmed.isEmpty()) {
+            importedLines.append(trimmed);
+        }
+    }
+
+    const bool useImportedLines = !importedLines.isEmpty();
+    if (useImportedLines) {
+        count = importedLines.size();
+    }
+
+    const int nextId = m_project->getNextDialogueId();
+    for (int i = 0; i < count; ++i) {
+        auto *d = new Dialogue(m_project);
+        const int dialogueId = nextId + i;
+        d->setId(dialogueId);
+        d->setCharacterId(charId);
+
+        QString text;
+        if (useImportedLines) {
+            text = importedLines.at(i);
+        } else if (textTemplate.isEmpty()) {
+            text = QString("新对话 %1").arg(dialogueId);
+        } else {
+            text = textTemplate;
+            text.replace("{n}", QString::number(i + 1));
+            text.replace("{id}", QString::number(dialogueId));
+        }
+        d->setText(text);
+        QString voiceFile;
+        if (!voicePrefix.isEmpty()) {
+            if (i < matchedVoiceFiles.size()) {
+                voiceFile = matchedVoiceFiles.at(i);
+            } else {
+                voiceFile = QString("%1%2.wav").arg(voicePrefix).arg(i + 1, 3, 10, QLatin1Char('0'));
+            }
+        }
+        d->setVoiceFile(voiceFile);
+        d->setSpecialEffect(Dialogue::SpecialEffect::None);
+        m_project->insertDialogueAt(d, insertIndex + i);
+    }
+    m_project->normalizeDialogueIds();
+
+    emit dataChanged();
+    previewDialogueByRow(insertIndex);
+
+    if (!voicePrefix.isEmpty()) {
+        if (matchedVoiceFiles.isEmpty()) {
+            QMessageBox::information(this,
+                                     "语音匹配提示",
+                                     "未在 resources/voices 中找到匹配此前缀的语音文件，已按命名规则填充语音文件名。");
+        } else if (matchedVoiceFiles.size() < count) {
+            QMessageBox::information(this,
+                                     "语音匹配提示",
+                                     QString("找到 %1 个匹配语音文件，其余已按命名规则填充。").arg(matchedVoiceFiles.size()));
+        }
+    }
+}
+
 void MainWindow::onTogglePreviewMode(bool enabled)
 {
     m_previewMode = enabled;
@@ -482,8 +638,10 @@ void MainWindow::onCharacterPropertiesChanged()
     character->setName(m_charNameEdit->text().trimmed());
     character->setPortraitPath(m_charPortraitEdit->text().trimmed());
     character->setPosition(textToPosition(m_charPositionCombo->currentText()));
+    character->setPortraitScale(m_charScaleSpin->value());
     character->setVoicePrefix(m_charVoicePrefixEdit->text().trimmed());
-    emit dataChanged();
+
+    // 角色文本输入过程中不做全量刷新，避免树和属性页重建导致重入/闪退。
 }
 
 void MainWindow::onBackgroundPropertiesChanged()
@@ -509,7 +667,8 @@ void MainWindow::onBackgroundPropertiesChanged()
     background->setStartDialogueId(start);
     background->setEndDialogueId(end);
     refreshBackgroundConflictLabel(background);
-    emit dataChanged();
+
+    // 背景行号输入过程中不做全量刷新，避免控件重建导致焦点丢失。
 }
 
 void MainWindow::onDialoguePropertiesChanged()
@@ -615,6 +774,7 @@ void MainWindow::setupMenusAndToolbar()
     editMenu->addAction("添加角色", this, &MainWindow::addCharacter);
     editMenu->addAction("添加背景", this, &MainWindow::addBackground);
     editMenu->addAction("添加对话", this, &MainWindow::onAddDialogue);
+    editMenu->addAction("批量生成对话", this, &MainWindow::onBatchAddDialogues);
 
     auto *toolsMenu = menuBar()->addMenu("工具");
     toolsMenu->addAction("导出游戏", this, &MainWindow::onExportGame);
@@ -624,6 +784,7 @@ void MainWindow::setupMenusAndToolbar()
     toolbar->addAction("添加角色", this, &MainWindow::addCharacter);
     toolbar->addAction("添加背景", this, &MainWindow::addBackground);
     toolbar->addAction("添加对话", this, &MainWindow::onAddDialogue);
+    toolbar->addAction("批量生成对话", this, &MainWindow::onBatchAddDialogues);
     m_actionPreviewMode = toolbar->addAction("预览模式");
     m_actionPreviewMode->setCheckable(true);
     connect(m_actionPreviewMode, &QAction::toggled, this, &MainWindow::onTogglePreviewMode);
@@ -670,10 +831,14 @@ void MainWindow::setupPropertyDock()
     m_charPortraitEdit = new QLineEdit(page1);
     m_charPositionCombo = new QComboBox(page1);
     m_charPositionCombo->addItems({"左", "中", "右"});
+    m_charScaleSpin = new QSpinBox(page1);
+    m_charScaleSpin->setRange(10, 300);
+    m_charScaleSpin->setSuffix("%");
     m_charVoicePrefixEdit = new QLineEdit(page1);
     form1->addRow("名称", m_charNameEdit);
     form1->addRow("立绘路径", m_charPortraitEdit);
     form1->addRow("位置", m_charPositionCombo);
+    form1->addRow("立绘大小", m_charScaleSpin);
     form1->addRow("语音前缀", m_charVoicePrefixEdit);
     m_stackProperties->addWidget(page1);
 
@@ -714,12 +879,19 @@ void MainWindow::setupPropertyDock()
     connect(m_charNameEdit, &QLineEdit::textEdited, this, &MainWindow::onCharacterPropertiesChanged);
     connect(m_charPortraitEdit, &QLineEdit::textEdited, this, &MainWindow::onCharacterPropertiesChanged);
     connect(m_charPositionCombo, &QComboBox::currentTextChanged, this, &MainWindow::onCharacterPropertiesChanged);
+    connect(m_charScaleSpin, &QSpinBox::valueChanged, this, &MainWindow::onCharacterPropertiesChanged);
     connect(m_charVoicePrefixEdit, &QLineEdit::textEdited, this, &MainWindow::onCharacterPropertiesChanged);
+    connect(m_charNameEdit, &QLineEdit::editingFinished, this, [this]() { emit dataChanged(); });
+    connect(m_charPortraitEdit, &QLineEdit::editingFinished, this, [this]() { emit dataChanged(); });
+    connect(m_charVoicePrefixEdit, &QLineEdit::editingFinished, this, [this]() { emit dataChanged(); });
 
     connect(m_bgImageEdit, &QLineEdit::textEdited, this, &MainWindow::onBackgroundPropertiesChanged);
     connect(m_bgBrowseButton, &QPushButton::clicked, this, &MainWindow::onBrowseBackgroundImage);
     connect(m_bgStartSpin, &QSpinBox::valueChanged, this, &MainWindow::onBackgroundPropertiesChanged);
     connect(m_bgEndSpin, &QSpinBox::valueChanged, this, &MainWindow::onBackgroundPropertiesChanged);
+    connect(m_bgImageEdit, &QLineEdit::editingFinished, this, [this]() { emit dataChanged(); });
+    connect(m_bgStartSpin, &QSpinBox::editingFinished, this, [this]() { emit dataChanged(); });
+    connect(m_bgEndSpin, &QSpinBox::editingFinished, this, [this]() { emit dataChanged(); });
 
     connect(m_dialogueCharacterCombo, &QComboBox::currentTextChanged, this, &MainWindow::onDialoguePropertiesChanged);
     connect(m_dialogueTextEdit, &QTextEdit::textChanged, this, &MainWindow::onDialoguePropertiesChanged);
@@ -793,6 +965,14 @@ void MainWindow::refreshAllViews()
     refreshTree();
     refreshTimeline();
     refreshPropertyPage();
+
+    // 进入编辑器后默认预览第一条对话，避免中间画布初始黑屏。
+    if (m_project && m_project->dialogueCount() > 0) {
+        previewDialogueByRow(0);
+    } else if (m_canvas) {
+        m_canvas->clearScene();
+        m_currentTimelineRow = -1;
+    }
 }
 
 void MainWindow::refreshTree()
@@ -865,6 +1045,7 @@ void MainWindow::refreshPropertyPage()
         m_charNameEdit->setText(character->name());
         m_charPortraitEdit->setText(character->portraitPath());
         m_charPositionCombo->setCurrentText(positionToText(character->position()));
+        m_charScaleSpin->setValue(character->portraitScale());
         m_charVoicePrefixEdit->setText(character->voicePrefix());
         m_updatingPropertyWidgets = false;
         return;
@@ -1067,7 +1248,16 @@ Character *MainWindow::selectedCharacter() const
     if (!item || itemType(item) != TreeItemType::Character) {
         return nullptr;
     }
-    return valueToPtr<Character>(item->data(0, kTreePointerRole));
+    Character *candidate = valueToPtr<Character>(item->data(0, kTreePointerRole));
+    if (!candidate || !m_project) {
+        return nullptr;
+    }
+    for (Character *character : m_project->characters()) {
+        if (character == candidate) {
+            return character;
+        }
+    }
+    return nullptr;
 }
 
 Background *MainWindow::selectedBackground() const
@@ -1076,7 +1266,16 @@ Background *MainWindow::selectedBackground() const
     if (!item || itemType(item) != TreeItemType::Background) {
         return nullptr;
     }
-    return valueToPtr<Background>(item->data(0, kTreePointerRole));
+    Background *candidate = valueToPtr<Background>(item->data(0, kTreePointerRole));
+    if (!candidate || !m_project) {
+        return nullptr;
+    }
+    for (Background *background : m_project->backgrounds()) {
+        if (background == candidate) {
+            return background;
+        }
+    }
+    return nullptr;
 }
 
 Dialogue *MainWindow::selectedDialogue() const
@@ -1085,7 +1284,16 @@ Dialogue *MainWindow::selectedDialogue() const
     if (!item || itemType(item) != TreeItemType::Dialogue) {
         return nullptr;
     }
-    return valueToPtr<Dialogue>(item->data(0, kTreePointerRole));
+    Dialogue *candidate = valueToPtr<Dialogue>(item->data(0, kTreePointerRole));
+    if (!candidate || !m_project) {
+        return nullptr;
+    }
+    for (Dialogue *dialogue : m_project->dialogues()) {
+        if (dialogue == candidate) {
+            return dialogue;
+        }
+    }
+    return nullptr;
 }
 
 MainWindow::TreeItemType MainWindow::itemType(const QTreeWidgetItem *item) const

@@ -55,6 +55,8 @@ public:
     void addCharacter(Character *character);
     // 添加并托管对话对象所有权。
     void addDialogue(Dialogue *dialogue);
+    // 在指定索引处插入对话对象，越界时自动夹紧。
+    void insertDialogueAt(Dialogue *dialogue, int index);
     // 添加并托管背景对象所有权。
     void addBackground(Background *background);
     // 清空当前项目中的所有角色、对话和背景对象。

@@ -26,7 +26,7 @@ public:
     void clearScene();
 
     // 显示当前说话角色立绘，其他角色不显示（单立绘模式）。
-    void showCharacterPortrait(const QString &imagePath, Character::Position pos);
+    void showCharacterPortrait(const QString &imagePath, Character::Position pos, int scalePercent = 100);
     // 隐藏当前立绘。
     void hideCharacterPortrait();
 

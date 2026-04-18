@@ -13,6 +13,7 @@
 #include <QMessageBox>
 #include <QPixmap>
 #include <QPushButton>
+#include <QSpinBox>
 #include <QVBoxLayout>
 
 namespace {
@@ -61,6 +62,10 @@ CharacterEditor::CharacterEditor(Character *character, const QString &projectPat
     m_voicePrefixEdit = new QLineEdit(this);
     m_positionCombo = new QComboBox(this);
     m_positionCombo->addItems({"左", "中", "右"});
+    m_scaleSpin = new QSpinBox(this);
+    m_scaleSpin->setRange(10, 300);
+    m_scaleSpin->setSuffix("%");
+    m_scaleSpin->setValue(100);
     m_browseButton = new QPushButton("浏览...", this);
 
     auto *portraitRow = new QHBoxLayout();
@@ -71,6 +76,7 @@ CharacterEditor::CharacterEditor(Character *character, const QString &projectPat
     formLayout->addRow("名称", m_nameEdit);
     formLayout->addRow("立绘路径", portraitRow);
     formLayout->addRow("位置", m_positionCombo);
+    formLayout->addRow("立绘大小", m_scaleSpin);
     formLayout->addRow("语音前缀", m_voicePrefixEdit);
 
     auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
@@ -84,6 +90,7 @@ CharacterEditor::CharacterEditor(Character *character, const QString &projectPat
         m_nameEdit->setText(m_character->name());
         m_portraitPathEdit->setText(m_character->portraitPath());
         m_positionCombo->setCurrentText(positionToText(m_character->position()));
+        m_scaleSpin->setValue(m_character->portraitScale());
         m_voicePrefixEdit->setText(m_character->voicePrefix());
         updatePreview(m_character->portraitPath());
     }
@@ -125,13 +132,19 @@ void CharacterEditor::applyAndAccept()
     m_character->setName(m_nameEdit->text().trimmed());
     m_character->setPortraitPath(m_portraitPathEdit->text().trimmed());
     m_character->setPosition(textToPosition(m_positionCombo->currentText()));
+    m_character->setPortraitScale(m_scaleSpin->value());
     m_character->setVoicePrefix(m_voicePrefixEdit->text().trimmed());
     accept();
 }
 
 void CharacterEditor::updatePreview(const QString &path)
 {
-    QPixmap pixmap(path);
+    QString resolvedPath = path.trimmed();
+    if (!resolvedPath.isEmpty() && !QDir::isAbsolutePath(resolvedPath) && !m_projectPath.trimmed().isEmpty()) {
+        resolvedPath = QDir(m_projectPath).absoluteFilePath(resolvedPath);
+    }
+
+    QPixmap pixmap(resolvedPath);
     if (pixmap.isNull()) {
         m_previewLabel->setText("无预览");
         m_previewLabel->setPixmap(QPixmap());

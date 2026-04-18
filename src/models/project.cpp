@@ -200,6 +200,16 @@ void Project::addDialogue(Dialogue *dialogue)
     m_dialogues.append(dialogue);
 }
 
+void Project::insertDialogueAt(Dialogue *dialogue, int index)
+{
+    if (!dialogue) {
+        return;
+    }
+    dialogue->setParent(this);
+    const int clampedIndex = qBound(0, index, m_dialogues.size());
+    m_dialogues.insert(clampedIndex, dialogue);
+}
+
 void Project::addBackground(Background *background)
 {
     if (!background) {

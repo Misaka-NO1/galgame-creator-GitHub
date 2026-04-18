@@ -25,6 +25,7 @@
 #include <QPushButton>
 #include <QTemporaryDir>
 #include <QVBoxLayout>
+#include <QOperatingSystemVersion>
 
 namespace {
 
@@ -118,6 +119,227 @@ bool runZipCommand(const QString &sourceDir, const QString &outputZipPath, QStri
 #endif
 }
 
+QString playerBinaryName()
+{
+#ifdef Q_OS_WIN
+    return "galplayer.exe";
+#else
+    return "galplayer";
+#endif
+}
+
+QString detectBuildConfigName(const QString &appDirPath)
+{
+    const QString lower = QFileInfo(appDirPath).fileName().toLower();
+    if (lower == "debug") {
+        return "Debug";
+    }
+    if (lower == "release") {
+        return "Release";
+    }
+    if (lower == "relwithdebinfo") {
+        return "RelWithDebInfo";
+    }
+    if (lower == "minsizerel") {
+        return "MinSizeRel";
+    }
+    return {};
+}
+
+QString findNearestCMakeBuildDir(const QString &startPath)
+{
+    QDir dir(startPath);
+    for (int i = 0; i < 8; ++i) {
+        if (QFileInfo::exists(dir.filePath("CMakeCache.txt"))) {
+            return dir.absolutePath();
+        }
+        if (!dir.cdUp()) {
+            break;
+        }
+    }
+    return {};
+}
+
+bool runBuildGalplayer(const QString &buildDir, const QString &config, QString *errorMsg)
+{
+    if (buildDir.isEmpty()) {
+        return false;
+    }
+
+    QProcess process;
+    QStringList args = {"--build", buildDir, "--target", "galplayer"};
+    if (!config.isEmpty()) {
+        args << "--config" << config;
+    }
+    process.start("cmake", args);
+    process.waitForFinished(-1);
+    if (process.exitStatus() == QProcess::NormalExit && process.exitCode() == 0) {
+        return true;
+    }
+
+    if (errorMsg) {
+        *errorMsg = QString::fromLocal8Bit(process.readAllStandardError());
+    }
+    return false;
+}
+
+QString locateBuiltPlayerBinary(const QString &buildDir, const QString &config)
+{
+    const QString binary = playerBinaryName();
+    const QString direct = QDir(buildDir).filePath(binary);
+    if (QFileInfo::exists(direct)) {
+        return direct;
+    }
+
+    if (!config.isEmpty()) {
+        const QString inConfig = QDir(buildDir).filePath(QDir::cleanPath(config + "/" + binary));
+        if (QFileInfo::exists(inConfig)) {
+            return inConfig;
+        }
+    }
+    return {};
+}
+
+bool ensureGalplayerBinaryReady(QString *outPlayerPath, QString *errorMsg)
+{
+    const QString appDir = QCoreApplication::applicationDirPath();
+    const QString binary = playerBinaryName();
+
+    const QString localBinary = QDir(appDir).filePath(binary);
+    if (QFileInfo::exists(localBinary)) {
+        *outPlayerPath = localBinary;
+        return true;
+    }
+
+    const QString buildDir = findNearestCMakeBuildDir(appDir);
+    if (buildDir.isEmpty()) {
+        if (errorMsg) {
+            *errorMsg = "未找到 CMake 构建目录，无法自动构建 galplayer。";
+        }
+        return false;
+    }
+
+    const QString config = detectBuildConfigName(appDir);
+    QString buildError;
+    if (!runBuildGalplayer(buildDir, config, &buildError)) {
+        // 再尝试一次无 config 构建（兼容单配置生成器）。
+        if (!runBuildGalplayer(buildDir, QString(), &buildError)) {
+            if (errorMsg) {
+                *errorMsg = QString("自动构建 galplayer 失败：%1").arg(buildError);
+            }
+            return false;
+        }
+    }
+
+    QString builtPath = locateBuiltPlayerBinary(buildDir, config);
+    if (builtPath.isEmpty()) {
+        builtPath = locateBuiltPlayerBinary(buildDir, QString());
+    }
+    if (builtPath.isEmpty()) {
+        if (QFileInfo::exists(localBinary)) {
+            builtPath = localBinary;
+        } else {
+            if (errorMsg) {
+                *errorMsg = "已执行自动构建，但未找到 galplayer 可执行文件。";
+            }
+            return false;
+        }
+    }
+
+    *outPlayerPath = builtPath;
+    return true;
+}
+
+bool copyPlayerRuntimeDependencies(const QString &rootDir, QString *errorMsg)
+{
+    const QString appDirPath = QCoreApplication::applicationDirPath();
+    QDir appDir(appDirPath);
+
+#ifdef Q_OS_WIN
+    const QFileInfoList dlls = appDir.entryInfoList({"Qt6*.dll", "lib*.dll", "icu*.dll"}, QDir::Files);
+    for (const QFileInfo &dll : dlls) {
+        const QString dst = QDir(rootDir).filePath(dll.fileName());
+        copyFileSafe(dll.absoluteFilePath(), dst);
+    }
+#endif
+
+    const QStringList pluginDirs = {"platforms", "imageformats", "styles", "iconengines", "multimedia"};
+    for (const QString &name : pluginDirs) {
+        const QString src = appDir.filePath(name);
+        if (!QDir(src).exists()) {
+            continue;
+        }
+        const QString dst = QDir(rootDir).filePath(name);
+        if (!copyDirectoryRecursively(src, dst)) {
+            if (errorMsg) {
+                *errorMsg = QString("复制运行时目录失败：%1").arg(name);
+            }
+            return false;
+        }
+    }
+    return true;
+}
+
+bool writeLauncherScript(const QString &rootDir, QString *errorMsg)
+{
+#ifdef Q_OS_WIN
+    const QString launcherPath = QDir(rootDir).filePath("启动游戏.bat");
+    QFile launcher(launcherPath);
+    if (!launcher.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        if (errorMsg) {
+            *errorMsg = "无法创建启动脚本。";
+        }
+        return false;
+    }
+    const QByteArray content =
+        "@echo off\r\n"
+        "setlocal\r\n"
+        "set ROOT=%~dp0\r\n"
+        "\"%ROOT%galplayer.exe\" \"%ROOT%\"\r\n";
+    launcher.write(content);
+    return true;
+#else
+    const QString launcherPath = QDir(rootDir).filePath("run_game.sh");
+    QFile launcher(launcherPath);
+    if (!launcher.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        if (errorMsg) {
+            *errorMsg = "无法创建启动脚本。";
+        }
+        return false;
+    }
+    const QByteArray content =
+        "#!/usr/bin/env bash\n"
+        "ROOT=\"$(cd \"$(dirname \"$0\")\" && pwd)\"\n"
+        "\"$ROOT/galplayer\" \"$ROOT\"\n";
+    launcher.write(content);
+    launcher.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner |
+                            QFileDevice::ReadGroup | QFileDevice::ExeGroup |
+                            QFileDevice::ReadOther | QFileDevice::ExeOther);
+    return true;
+#endif
+}
+
+bool copyPlayerBinaryTo(const QString &rootDir, QString *errorMsg)
+{
+    QString playerPath;
+    if (!ensureGalplayerBinaryReady(&playerPath, errorMsg)) {
+        return false;
+    }
+
+    const QString dst = QDir(rootDir).filePath(playerBinaryName());
+    if (!copyFileSafe(playerPath, dst)) {
+        if (errorMsg) {
+            *errorMsg = "复制播放器失败。";
+        }
+        return false;
+    }
+
+    if (!copyPlayerRuntimeDependencies(rootDir, errorMsg)) {
+        return false;
+    }
+    return true;
+}
+
 } // namespace
 
 bool Exporter::exportGame(const Project &project,
@@ -150,6 +372,13 @@ bool Exporter::exportGame(const Project &project,
     const QString playerTemplateDir = QDir(QCoreApplication::applicationDirPath()).absoluteFilePath("player_template");
     if (QDir(playerTemplateDir).exists()) {
         copyDirectoryRecursively(playerTemplateDir, tempRoot);
+    }
+
+    if (!copyPlayerBinaryTo(tempRoot, errorMsg)) {
+        return false;
+    }
+    if (!writeLauncherScript(tempRoot, errorMsg)) {
+        return false;
     }
 
     QJsonObject assetsObject;
@@ -357,6 +586,8 @@ bool Exporter::generateGameJson(const Project &project,
         scriptLine["voice"] = dialogue->voiceFile();
         scriptLine["voicePath"] = voiceAssets.value(dialogue->voiceFile()).toString();
         scriptLine["effect"] = dialogue->toJson().value("specialEffect").toString("none");
+        const Character *character = project.getCharacter(dialogue->characterId());
+        scriptLine["portraitScale"] = character ? character->portraitScale() : 100;
         scriptArray.append(scriptLine);
     }
 
@@ -448,6 +679,7 @@ ExportDialog::ExportDialog(Project *project, const QString &projectDir, QWidget 
     m_outputModeCombo = new QComboBox(this);
     m_outputModeCombo->addItem("导出.galgame包");
     m_outputModeCombo->addItem("导出文件夹(调试)");
+    m_outputModeCombo->setCurrentIndex(1);
 
     auto *form = new QFormLayout();
     form->addRow("输出路径", pathRow);

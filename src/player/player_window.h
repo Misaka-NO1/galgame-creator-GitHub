@@ -43,6 +43,7 @@ private:
         QString text;
         QString backgroundPath;
         QString voicePath;
+        int portraitScale = 100;
     };
 
     bool loadFromDirectory(const QString &dirPath, QString *errorMsg);

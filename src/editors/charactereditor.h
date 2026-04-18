@@ -9,6 +9,7 @@ class QLabel;
 class QLineEdit;
 class QComboBox;
 class QPushButton;
+class QSpinBox;
 
 class CharacterEditor : public QDialog
 {
@@ -32,6 +33,7 @@ private:
     QLineEdit *m_nameEdit = nullptr;
     QLineEdit *m_portraitPathEdit = nullptr;
     QComboBox *m_positionCombo = nullptr;
+    QSpinBox *m_scaleSpin = nullptr;
     QLineEdit *m_voicePrefixEdit = nullptr;
     QPushButton *m_browseButton = nullptr;
 };

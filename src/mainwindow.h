@@ -56,6 +56,7 @@ private slots:
     void onOpenProject();
     void onSaveProject();
     void onAddDialogue();
+    void onBatchAddDialogues();
     void onTogglePreviewMode(bool enabled);
     void onExportGame();
     void onTestRun();
@@ -130,6 +131,7 @@ private:
     QLineEdit *m_charNameEdit = nullptr;
     QLineEdit *m_charPortraitEdit = nullptr;
     QComboBox *m_charPositionCombo = nullptr;
+    QSpinBox *m_charScaleSpin = nullptr;
     QLineEdit *m_charVoicePrefixEdit = nullptr;
 
     QLineEdit *m_bgImageEdit = nullptr;

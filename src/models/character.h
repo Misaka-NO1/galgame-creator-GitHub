@@ -14,6 +14,7 @@ class Character : public QObject
     Q_PROPERTY(QString portraitPath READ portraitPath WRITE setPortraitPath)
     Q_PROPERTY(QString avatarPath READ avatarPath WRITE setAvatarPath)
     Q_PROPERTY(QString voicePrefix READ voicePrefix WRITE setVoicePrefix)
+    Q_PROPERTY(int portraitScale READ portraitScale WRITE setPortraitScale)
     Q_PROPERTY(Position position READ position WRITE setPosition)
 
 public:
@@ -51,6 +52,11 @@ public:
     // 设置角色语音文件前缀。
     void setVoicePrefix(const QString &voicePrefix);
 
+    // 获取立绘缩放百分比（100 为原始基准）。
+    int portraitScale() const;
+    // 设置立绘缩放百分比（限制在 10~300）。
+    void setPortraitScale(int scalePercent);
+
     // 获取立绘显示位置。
     Position position() const;
     // 设置立绘显示位置。
@@ -69,6 +75,7 @@ private:
     QString m_portraitPath;
     QString m_avatarPath;
     QString m_voicePrefix;
+    int m_portraitScale = 100;
     Position m_position = Position::Center;
 };
 

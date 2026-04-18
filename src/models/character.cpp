@@ -100,6 +100,16 @@ void Character::setVoicePrefix(const QString &voicePrefix)
     m_voicePrefix = voicePrefix;
 }
 
+int Character::portraitScale() const
+{
+    return m_portraitScale;
+}
+
+void Character::setPortraitScale(int scalePercent)
+{
+    m_portraitScale = qBound(10, scalePercent, 300);
+}
+
 Character::Position Character::position() const
 {
     return m_position;
@@ -118,6 +128,7 @@ QJsonObject Character::toJson() const
     json["portraitPath"] = m_portraitPath;
     json["avatarPath"] = m_avatarPath;
     json["voicePrefix"] = m_voicePrefix;
+    json["portraitScale"] = m_portraitScale;
     json["position"] = positionToString(m_position);
     return json;
 }
@@ -130,6 +141,7 @@ Character *Character::fromJson(const QJsonObject &json, QObject *parent)
     character->setPortraitPath(json.value("portraitPath").toString());
     character->setAvatarPath(json.value("avatarPath").toString());
     character->setVoicePrefix(json.value("voicePrefix").toString());
+    character->setPortraitScale(json.value("portraitScale").toInt(100));
     character->setPosition(positionFromString(json.value("position").toString()));
     return character;
 }

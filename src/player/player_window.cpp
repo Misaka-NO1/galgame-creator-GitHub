@@ -220,6 +220,7 @@ bool PlayerWindow::loadFromDirectory(const QString &dirPath, QString *errorMsg)
         line.text = obj.value("text").toString();
         line.backgroundPath = obj.value("bgPath").toString();
         line.voicePath = obj.value("voicePath").toString();
+        line.portraitScale = obj.value("portraitScale").toInt(100);
         m_script.append(line);
     }
 
@@ -301,7 +302,9 @@ void PlayerWindow::renderCurrentLine()
     if (portrait.isNull()) {
         m_portraitItem->setVisible(false);
     } else {
-        const QPixmap portraitScaled = portrait.scaledToHeight(600, Qt::SmoothTransformation);
+        const int clampedScale = qBound(10, line.portraitScale, 300);
+        const int targetHeight = qMax(60, 600 * clampedScale / 100);
+        const QPixmap portraitScaled = portrait.scaledToHeight(targetHeight, Qt::SmoothTransformation);
         m_portraitItem->setPixmap(portraitScaled);
         const qreal x = (1280 - portraitScaled.width()) / 2.0;
         const qreal y = 540.0 - portraitScaled.height();
