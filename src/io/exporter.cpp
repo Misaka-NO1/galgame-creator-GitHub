@@ -19,8 +19,10 @@
 #include <QJsonObject>
 #include <QLabel>
 #include <QLineEdit>
+#include <QLibraryInfo>
 #include <QMessageBox>
 #include <QProcess>
+#include <QProcessEnvironment>
 #include <QProgressBar>
 #include <QPushButton>
 #include <QTemporaryDir>
@@ -250,23 +252,119 @@ bool ensureGalplayerBinaryReady(QString *outPlayerPath, QString *errorMsg)
     return true;
 }
 
-bool copyPlayerRuntimeDependencies(const QString &rootDir, QString *errorMsg)
+QString findWinDeployQtExecutable()
+{
+#ifdef Q_OS_WIN
+    const QString exeName = "windeployqt.exe";
+
+    const QString qtBinPath = QLibraryInfo::path(QLibraryInfo::BinariesPath);
+    const QString qtBinCandidate = QDir(qtBinPath).filePath(exeName);
+    if (QFileInfo::exists(qtBinCandidate)) {
+        return qtBinCandidate;
+    }
+
+    const QString appDir = QCoreApplication::applicationDirPath();
+    const QString appDirCandidate = QDir(appDir).filePath(exeName);
+    if (QFileInfo::exists(appDirCandidate)) {
+        return appDirCandidate;
+    }
+
+    const QString pathEnv = QProcessEnvironment::systemEnvironment().value("PATH");
+    const QStringList paths = pathEnv.split(';', Qt::SkipEmptyParts);
+    for (const QString &pathItem : paths) {
+        const QString candidate = QDir(pathItem).filePath(exeName);
+        if (QFileInfo::exists(candidate)) {
+            return candidate;
+        }
+    }
+#endif
+    return {};
+}
+
+bool deployWithWinDeployQt(const QString &playerPath, const QString &rootDir, QString *errorMsg)
+{
+#ifdef Q_OS_WIN
+    const QString windeployqt = findWinDeployQtExecutable();
+    if (windeployqt.isEmpty()) {
+        if (errorMsg) {
+            *errorMsg = "未找到 windeployqt.exe。";
+        }
+        return false;
+    }
+
+    QProcess process;
+    process.setWorkingDirectory(rootDir);
+    process.start(windeployqt, {"--dir", rootDir, "--force", playerPath});
+    process.waitForFinished(-1);
+    if (process.exitStatus() == QProcess::NormalExit && process.exitCode() == 0) {
+        return true;
+    }
+
+    if (errorMsg) {
+        QString detail = QString::fromLocal8Bit(process.readAllStandardError()).trimmed();
+        if (detail.isEmpty()) {
+            detail = QString::fromLocal8Bit(process.readAllStandardOutput()).trimmed();
+        }
+        if (detail.isEmpty()) {
+            detail = "未知错误";
+        }
+        *errorMsg = QString("windeployqt 执行失败：%1").arg(detail);
+    }
+    return false;
+#else
+    Q_UNUSED(playerPath)
+    Q_UNUSED(rootDir)
+    Q_UNUSED(errorMsg)
+    return true;
+#endif
+}
+
+bool copyPlayerRuntimeDependenciesFallback(const QString &rootDir, const QString &playerPath, QString *errorMsg)
 {
     const QString appDirPath = QCoreApplication::applicationDirPath();
+    const QString playerDirPath = QFileInfo(playerPath).absolutePath();
     QDir appDir(appDirPath);
+    QDir playerDir(playerDirPath);
 
 #ifdef Q_OS_WIN
-    const QFileInfoList dlls = appDir.entryInfoList({"Qt6*.dll", "lib*.dll", "icu*.dll"}, QDir::Files);
-    for (const QFileInfo &dll : dlls) {
-        const QString dst = QDir(rootDir).filePath(dll.fileName());
-        copyFileSafe(dll.absoluteFilePath(), dst);
+    auto copyDllByPatterns = [&](const QDir &srcDir, const QStringList &patterns) {
+        const QFileInfoList dlls = srcDir.entryInfoList(patterns, QDir::Files);
+        for (const QFileInfo &dll : dlls) {
+            const QString dst = QDir(rootDir).filePath(dll.fileName());
+            copyFileSafe(dll.absoluteFilePath(), dst);
+        }
+    };
+
+    // 优先从播放器目录带出依赖，再从编辑器目录补齐。
+    copyDllByPatterns(playerDir, {"Qt6*.dll", "lib*.dll", "icu*.dll"});
+    copyDllByPatterns(appDir, {"Qt6*.dll", "lib*.dll", "icu*.dll"});
+
+    const QStringList runtimeDllNames = {
+        "libgcc_s_seh-1.dll",
+        "libstdc++-6.dll",
+        "libwinpthread-1.dll"
+    };
+    for (const QString &dllName : runtimeDllNames) {
+        const QString srcFromPlayer = playerDir.filePath(dllName);
+        const QString srcFromApp = appDir.filePath(dllName);
+        const QString dst = QDir(rootDir).filePath(dllName);
+        if (QFileInfo::exists(srcFromPlayer)) {
+            copyFileSafe(srcFromPlayer, dst);
+        } else if (QFileInfo::exists(srcFromApp)) {
+            copyFileSafe(srcFromApp, dst);
+        }
     }
 #endif
 
     const QStringList pluginDirs = {"platforms", "imageformats", "styles", "iconengines", "multimedia"};
     for (const QString &name : pluginDirs) {
-        const QString src = appDir.filePath(name);
-        if (!QDir(src).exists()) {
+        QString src;
+        if (QDir(playerDir.filePath(name)).exists()) {
+            src = playerDir.filePath(name);
+        } else if (QDir(appDir.filePath(name)).exists()) {
+            src = appDir.filePath(name);
+        }
+        if (src.isEmpty()) {
             continue;
         }
         const QString dst = QDir(rootDir).filePath(name);
@@ -278,6 +376,25 @@ bool copyPlayerRuntimeDependencies(const QString &rootDir, QString *errorMsg)
         }
     }
     return true;
+}
+
+bool copyPlayerRuntimeDependencies(const QString &rootDir, const QString &playerPath, QString *errorMsg)
+{
+#ifdef Q_OS_WIN
+    QString deployError;
+    if (deployWithWinDeployQt(playerPath, rootDir, &deployError)) {
+        return true;
+    }
+    if (copyPlayerRuntimeDependenciesFallback(rootDir, playerPath, errorMsg)) {
+        return true;
+    }
+    if (errorMsg && !deployError.isEmpty()) {
+        *errorMsg += QString("\n（另外：%1）").arg(deployError);
+    }
+    return false;
+#else
+    return copyPlayerRuntimeDependenciesFallback(rootDir, playerPath, errorMsg);
+#endif
 }
 
 bool writeLauncherScript(const QString &rootDir, QString *errorMsg)
@@ -294,8 +411,9 @@ bool writeLauncherScript(const QString &rootDir, QString *errorMsg)
     const QByteArray content =
         "@echo off\r\n"
         "setlocal\r\n"
-        "set ROOT=%~dp0\r\n"
-        "\"%ROOT%galplayer.exe\" \"%ROOT%\"\r\n";
+        "set \"ROOT=%~dp0\"\r\n"
+        "set \"ROOT=%ROOT:~0,-1%\"\r\n"
+        "\"%ROOT%\\galplayer.exe\" \"%ROOT%\"\r\n";
     launcher.write(content);
     return true;
 #else
@@ -334,7 +452,7 @@ bool copyPlayerBinaryTo(const QString &rootDir, QString *errorMsg)
         return false;
     }
 
-    if (!copyPlayerRuntimeDependencies(rootDir, errorMsg)) {
+    if (!copyPlayerRuntimeDependencies(rootDir, playerPath, errorMsg)) {
         return false;
     }
     return true;

@@ -15,6 +15,7 @@ class QJsonObject;
 class QKeyEvent;
 class QResizeEvent;
 class QEvent;
+class QShowEvent;
 
 class PlayerWindow : public QMainWindow
 {
@@ -29,6 +30,7 @@ public:
 protected:
     void keyPressEvent(QKeyEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
+    void showEvent(QShowEvent *event) override;
     bool eventFilter(QObject *watched, QEvent *event) override;
 
 private slots:

@@ -18,6 +18,7 @@
 #include <QProcess>
 #include <QStandardPaths>
 #include <QTemporaryDir>
+#include <QTimer>
 
 namespace {
 
@@ -144,6 +145,15 @@ void PlayerWindow::resizeEvent(QResizeEvent *event)
 {
     QMainWindow::resizeEvent(event);
     updateViewTransform();
+}
+
+void PlayerWindow::showEvent(QShowEvent *event)
+{
+    QMainWindow::showEvent(event);
+    // 首次显示后再执行一次 fit，避免首帧窗口尺寸未稳定导致画面偏小。
+    QTimer::singleShot(0, this, [this]() {
+        updateViewTransform();
+    });
 }
 
 bool PlayerWindow::eventFilter(QObject *watched, QEvent *event)
