@@ -60,11 +60,17 @@ private slots:
     void onTogglePreviewMode(bool enabled);
     void onExportGame();
     void onTestRun();
+    void onShowPropertiesDock();
 
+    void onProjectPropertiesChanged();
     void onCharacterPropertiesChanged();
     void onBackgroundPropertiesChanged();
     void onDialoguePropertiesChanged();
     void onBrowseBackgroundImage();
+    void onBrowseBackgroundBgm();
+    void onBrowseStartMenuBackground();
+    void onBrowseStartMenuBgm();
+    void onBrowseDialogueVoice();
     void onDeleteSelectedItem();
 
 private:
@@ -127,6 +133,10 @@ private:
 
     QStackedWidget *m_stackProperties = nullptr;
     QLabel *m_emptyPropertyLabel = nullptr;
+    QLineEdit *m_projectStartBgEdit = nullptr;
+    QPushButton *m_projectStartBgBrowseButton = nullptr;
+    QLineEdit *m_projectStartBgmEdit = nullptr;
+    QPushButton *m_projectStartBgmBrowseButton = nullptr;
 
     QLineEdit *m_charNameEdit = nullptr;
     QLineEdit *m_charPortraitEdit = nullptr;
@@ -136,6 +146,8 @@ private:
 
     QLineEdit *m_bgImageEdit = nullptr;
     QPushButton *m_bgBrowseButton = nullptr;
+    QLineEdit *m_bgBgmEdit = nullptr;
+    QPushButton *m_bgBgmBrowseButton = nullptr;
     QSpinBox *m_bgStartSpin = nullptr;
     QSpinBox *m_bgEndSpin = nullptr;
     QLabel *m_bgConflictLabel = nullptr;
@@ -143,6 +155,7 @@ private:
     QComboBox *m_dialogueCharacterCombo = nullptr;
     QTextEdit *m_dialogueTextEdit = nullptr;
     QLineEdit *m_dialogueVoiceEdit = nullptr;
+    QPushButton *m_dialogueVoiceBrowseButton = nullptr;
     QComboBox *m_dialogueEffectCombo = nullptr;
 
     QListView *m_timelineView = nullptr;

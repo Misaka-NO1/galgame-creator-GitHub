@@ -4,7 +4,7 @@ project(galgame_creator LANGUAGES CXX)
 option(CANVAS_TEST "Enable standalone GameCanvas test main" OFF)
 option(MODEL_TEST "Enable standalone model test main" OFF)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Widgets)
+find_package(Qt6 REQUIRED COMPONENTS Core Widgets Multimedia)
 
 qt_standard_project_setup()
 
@@ -41,6 +41,7 @@ target_link_libraries(galgame_creator
     PRIVATE
         Qt::Core
         Qt::Widgets
+        Qt::Multimedia
 )
 
 qt_add_executable(galplayer
@@ -56,6 +57,7 @@ target_link_libraries(galplayer
     PRIVATE
         Qt::Core
         Qt::Widgets
+        Qt::Multimedia
 )
 
 if(CANVAS_TEST)

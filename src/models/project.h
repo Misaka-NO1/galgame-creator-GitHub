@@ -16,6 +16,8 @@ class Project : public QObject
     Q_PROPERTY(QString name READ name WRITE setName)
     Q_PROPERTY(QString version READ version WRITE setVersion)
     Q_PROPERTY(QFont defaultFont READ defaultFont WRITE setDefaultFont)
+    Q_PROPERTY(QString startMenuBackgroundPath READ startMenuBackgroundPath WRITE setStartMenuBackgroundPath)
+    Q_PROPERTY(QString startMenuBgmPath READ startMenuBgmPath WRITE setStartMenuBgmPath)
     Q_PROPERTY(QList<QObject *> characters READ characterObjects)
     Q_PROPERTY(QList<QObject *> dialogues READ dialogueObjects)
     Q_PROPERTY(QList<QObject *> backgrounds READ backgroundObjects)
@@ -38,6 +40,16 @@ public:
     QFont defaultFont() const;
     // 设置项目默认字体。
     void setDefaultFont(const QFont &defaultFont);
+
+    // 获取开始界面背景图路径。
+    QString startMenuBackgroundPath() const;
+    // 设置开始界面背景图路径。
+    void setStartMenuBackgroundPath(const QString &path);
+
+    // 获取开始界面背景音乐路径。
+    QString startMenuBgmPath() const;
+    // 设置开始界面背景音乐路径。
+    void setStartMenuBgmPath(const QString &path);
 
     // 获取角色对象列表（强类型）。
     QList<Character *> characters() const;
@@ -94,6 +106,8 @@ private:
     QString m_name;
     QString m_version = "1.0";
     QFont m_defaultFont;
+    QString m_startMenuBackgroundPath;
+    QString m_startMenuBgmPath;
     QList<Character *> m_characters;
     QList<Dialogue *> m_dialogues;
     QList<Background *> m_backgrounds;

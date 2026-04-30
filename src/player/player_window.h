@@ -12,6 +12,8 @@ class QGraphicsRectItem;
 class QGraphicsTextItem;
 class QTemporaryDir;
 class QPushButton;
+class QMediaPlayer;
+class QAudioOutput;
 class QKeyEvent;
 class QResizeEvent;
 class QEvent;
@@ -37,6 +39,7 @@ private slots:
     void onAdvanceRequested();
     void onTextUpdated(const QString &text);
     void onTextFinished();
+    void onSettingsButtonClicked();
     void onSaveButtonClicked();
 
 private:
@@ -52,6 +55,7 @@ private:
         QString characterId;
         QString text;
         QString backgroundPath;
+        QString bgmPath;
         QString voicePath;
         int portraitScale = 100;
     };
@@ -61,10 +65,14 @@ private:
     bool showStartMenu(QString *errorMsg);
     bool saveToSlot(int slot, QString *errorMsg);
     bool loadFromSlot(int slot, QString *errorMsg);
+    bool clearAllSaveSlots(QString *errorMsg);
     SaveSlotMeta readSaveSlotMeta(int slot) const;
     QString gameSaveDir() const;
     QString slotSavePath(int slot) const;
+    void showSettingsDialog(bool *requestBackToStart = nullptr);
+    void enterStartScreenState();
     void updateSaveButtonGeometry();
+    void playLineAudio(const RuntimeLine &line);
     void renderCurrentLine();
     void updateViewTransform();
     void toggleFullScreenMode();
@@ -80,6 +88,11 @@ private:
     QGraphicsTextItem *m_nameItem = nullptr;
     QGraphicsTextItem *m_textItem = nullptr;
     QPushButton *m_saveButton = nullptr;
+    QMediaPlayer *m_voicePlayer = nullptr;
+    QAudioOutput *m_voiceOutput = nullptr;
+    QMediaPlayer *m_bgmPlayer = nullptr;
+    QAudioOutput *m_bgmOutput = nullptr;
+    QString m_currentBgmPath;
 
     TypewriterEffect m_typewriter;
     bool m_fullScreen = false;
@@ -92,6 +105,8 @@ private:
     QHash<QString, QString> m_charDisplayNames;
     QHash<QString, QString> m_charPortraitPaths;
     int m_currentIndex = 0;
+    QString m_startMenuBackgroundPath;
+    QString m_startMenuBgmPath;
     bool m_startMenuPending = false;
     bool m_startMenuShown = false;
 };

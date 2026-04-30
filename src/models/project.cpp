@@ -43,7 +43,8 @@ bool ensureResourceDirectories(const QString &projectFilePath)
 
     return baseDir.mkpath("resources/characters")
         && baseDir.mkpath("resources/backgrounds")
-        && baseDir.mkpath("resources/voices");
+        && baseDir.mkpath("resources/voices")
+        && baseDir.mkpath("resources/bgm");
 }
 
 bool hasContinuousDialogueIds(const QList<Dialogue *> &dialogues)
@@ -135,6 +136,26 @@ QFont Project::defaultFont() const
 void Project::setDefaultFont(const QFont &defaultFont)
 {
     m_defaultFont = defaultFont;
+}
+
+QString Project::startMenuBackgroundPath() const
+{
+    return m_startMenuBackgroundPath;
+}
+
+void Project::setStartMenuBackgroundPath(const QString &path)
+{
+    m_startMenuBackgroundPath = path;
+}
+
+QString Project::startMenuBgmPath() const
+{
+    return m_startMenuBgmPath;
+}
+
+void Project::setStartMenuBgmPath(const QString &path)
+{
+    m_startMenuBgmPath = path;
 }
 
 QList<Character *> Project::characters() const
@@ -267,6 +288,8 @@ bool Project::saveToFile(const QString &path) const
     root["name"] = m_name;
     root["version"] = m_version;
     root["defaultFont"] = fontToJson(m_defaultFont);
+    root["startMenuBackgroundPath"] = m_startMenuBackgroundPath;
+    root["startMenuBgmPath"] = m_startMenuBgmPath;
     root["characters"] = charactersJson;
     root["backgrounds"] = backgroundsJson;
     root["dialogues"] = dialoguesJson;
@@ -308,6 +331,8 @@ Project *Project::loadFromFile(const QString &path, QObject *parent, QString *er
     project->setName(root.value("name").toString());
     project->setVersion(root.value("version").toString("1.0"));
     project->setDefaultFont(fontFromJson(root.value("defaultFont")));
+    project->setStartMenuBackgroundPath(root.value("startMenuBackgroundPath").toString());
+    project->setStartMenuBgmPath(root.value("startMenuBgmPath").toString());
 
     const QJsonArray charactersJson = root.value("characters").toArray();
     const QJsonArray backgroundsJson = root.value("backgrounds").toArray();

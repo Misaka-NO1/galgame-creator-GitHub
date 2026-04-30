@@ -624,6 +624,27 @@ void MainWindow::onTestRun()
     player->showMaximized();
 }
 
+void MainWindow::onShowPropertiesDock()
+{
+    if (!m_propertiesDock) {
+        return;
+    }
+    m_propertiesDock->setVisible(true);
+    m_propertiesDock->raise();
+    if (m_stackProperties) {
+        m_stackProperties->setFocus();
+    }
+}
+
+void MainWindow::onProjectPropertiesChanged()
+{
+    if (m_updatingPropertyWidgets || !m_project) {
+        return;
+    }
+    m_project->setStartMenuBackgroundPath(m_projectStartBgEdit->text().trimmed());
+    m_project->setStartMenuBgmPath(m_projectStartBgmEdit->text().trimmed());
+}
+
 void MainWindow::onCharacterPropertiesChanged()
 {
     if (m_updatingPropertyWidgets) {
@@ -664,6 +685,7 @@ void MainWindow::onBackgroundPropertiesChanged()
     }
 
     background->setImagePath(m_bgImageEdit->text().trimmed());
+    background->setBgmPath(m_bgBgmEdit->text().trimmed());
     background->setStartDialogueId(start);
     background->setEndDialogueId(end);
     refreshBackgroundConflictLabel(background);
@@ -738,6 +760,177 @@ void MainWindow::onBrowseBackgroundImage()
     emit dataChanged();
 }
 
+void MainWindow::onBrowseBackgroundBgm()
+{
+    if (!m_project) {
+        return;
+    }
+
+    Background *background = selectedBackground();
+    if (!background) {
+        QMessageBox::information(this, "提示", "请先在左侧选择一个背景。");
+        return;
+    }
+
+    const QString sourcePath = QFileDialog::getOpenFileName(this,
+                                                            "选择背景音乐",
+                                                            QString(),
+                                                            "Audio (*.mp3 *.ogg *.wav *.flac *.m4a)");
+    if (sourcePath.isEmpty()) {
+        return;
+    }
+
+    QDir projectDir(QDir::cleanPath(m_projectPath));
+    if (!projectDir.exists() && !projectDir.mkpath(".")) {
+        QMessageBox::warning(this, "失败", "项目目录不可用。");
+        return;
+    }
+    if (!projectDir.mkpath("resources/bgm")) {
+        QMessageBox::warning(this, "失败", "无法创建 resources/bgm 目录。");
+        return;
+    }
+
+    const QFileInfo sourceInfo(sourcePath);
+    const QString ext = sourceInfo.suffix().isEmpty() ? "ogg" : sourceInfo.suffix();
+    const QString fileName = QString("bgm_%1.%2").arg(background->id(), ext);
+    const QString relativePath = QDir::cleanPath(QString("resources/bgm/%1").arg(fileName));
+    const QString absoluteTarget = projectDir.filePath(relativePath);
+
+    QFile::remove(absoluteTarget);
+    if (!QFile::copy(sourcePath, absoluteTarget)) {
+        QMessageBox::warning(this, "失败", "复制背景音乐失败。");
+        return;
+    }
+
+    background->setBgmPath(relativePath);
+    m_bgBgmEdit->setText(relativePath);
+    emit dataChanged();
+}
+
+void MainWindow::onBrowseDialogueVoice()
+{
+    if (!m_project) {
+        return;
+    }
+
+    Dialogue *dialogue = selectedDialogue();
+    if (!dialogue) {
+        QMessageBox::information(this, "提示", "请先在左侧选择一条对话。");
+        return;
+    }
+
+    const QString sourcePath = QFileDialog::getOpenFileName(this,
+                                                            "选择语音文件",
+                                                            QString(),
+                                                            "Audio (*.wav *.ogg *.mp3 *.flac *.m4a)");
+    if (sourcePath.isEmpty()) {
+        return;
+    }
+
+    QDir projectDir(QDir::cleanPath(m_projectPath));
+    if (!projectDir.exists() && !projectDir.mkpath(".")) {
+        QMessageBox::warning(this, "失败", "项目目录不可用。");
+        return;
+    }
+    if (!projectDir.mkpath("resources/voices")) {
+        QMessageBox::warning(this, "失败", "无法创建 resources/voices 目录。");
+        return;
+    }
+
+    const QFileInfo sourceInfo(sourcePath);
+    const QString ext = sourceInfo.suffix().isEmpty() ? "wav" : sourceInfo.suffix();
+    const QString fileName = QString("voice_%1.%2").arg(dialogue->id()).arg(ext);
+    const QString relativePath = QDir::cleanPath(QString("resources/voices/%1").arg(fileName));
+    const QString absoluteTarget = projectDir.filePath(relativePath);
+
+    QFile::remove(absoluteTarget);
+    if (!QFile::copy(sourcePath, absoluteTarget)) {
+        QMessageBox::warning(this, "失败", "复制语音文件失败。");
+        return;
+    }
+
+    // 对话里只存文件名，导出器会按 resources/voices/<voiceFile> 查找。
+    const QString voiceFileName = QFileInfo(relativePath).fileName();
+    dialogue->setVoiceFile(voiceFileName);
+    m_dialogueVoiceEdit->setText(voiceFileName);
+    emit dataChanged();
+}
+
+void MainWindow::onBrowseStartMenuBackground()
+{
+    if (!m_project) {
+        return;
+    }
+
+    const QString sourcePath = QFileDialog::getOpenFileName(this, "选择开始界面背景", QString(), "Images (*.png *.jpg *.jpeg *.webp)");
+    if (sourcePath.isEmpty()) {
+        return;
+    }
+
+    QDir projectDir(QDir::cleanPath(m_projectPath));
+    if (!projectDir.exists() && !projectDir.mkpath(".")) {
+        QMessageBox::warning(this, "失败", "项目目录不可用。");
+        return;
+    }
+    if (!projectDir.mkpath("resources/ui")) {
+        QMessageBox::warning(this, "失败", "无法创建 resources/ui 目录。");
+        return;
+    }
+
+    const QFileInfo sourceInfo(sourcePath);
+    const QString ext = sourceInfo.suffix().isEmpty() ? "png" : sourceInfo.suffix();
+    const QString relativePath = QDir::cleanPath(QString("resources/ui/start_bg.%1").arg(ext));
+    const QString absoluteTarget = projectDir.filePath(relativePath);
+    QFile::remove(absoluteTarget);
+    if (!QFile::copy(sourcePath, absoluteTarget)) {
+        QMessageBox::warning(this, "失败", "复制开始界面背景失败。");
+        return;
+    }
+
+    m_project->setStartMenuBackgroundPath(relativePath);
+    m_projectStartBgEdit->setText(relativePath);
+    emit dataChanged();
+}
+
+void MainWindow::onBrowseStartMenuBgm()
+{
+    if (!m_project) {
+        return;
+    }
+
+    const QString sourcePath = QFileDialog::getOpenFileName(this,
+                                                            "选择开始界面背景音乐",
+                                                            QString(),
+                                                            "Audio (*.mp3 *.ogg *.wav *.flac *.m4a)");
+    if (sourcePath.isEmpty()) {
+        return;
+    }
+
+    QDir projectDir(QDir::cleanPath(m_projectPath));
+    if (!projectDir.exists() && !projectDir.mkpath(".")) {
+        QMessageBox::warning(this, "失败", "项目目录不可用。");
+        return;
+    }
+    if (!projectDir.mkpath("resources/bgm")) {
+        QMessageBox::warning(this, "失败", "无法创建 resources/bgm 目录。");
+        return;
+    }
+
+    const QFileInfo sourceInfo(sourcePath);
+    const QString ext = sourceInfo.suffix().isEmpty() ? "ogg" : sourceInfo.suffix();
+    const QString relativePath = QDir::cleanPath(QString("resources/bgm/start_menu.%1").arg(ext));
+    const QString absoluteTarget = projectDir.filePath(relativePath);
+    QFile::remove(absoluteTarget);
+    if (!QFile::copy(sourcePath, absoluteTarget)) {
+        QMessageBox::warning(this, "失败", "复制开始界面音乐失败。");
+        return;
+    }
+
+    m_project->setStartMenuBgmPath(relativePath);
+    m_projectStartBgmEdit->setText(relativePath);
+    emit dataChanged();
+}
+
 void MainWindow::onDeleteSelectedItem()
 {
     QTreeWidgetItem *item = m_treeResources ? m_treeResources->currentItem() : nullptr;
@@ -779,12 +972,14 @@ void MainWindow::setupMenusAndToolbar()
     auto *toolsMenu = menuBar()->addMenu("工具");
     toolsMenu->addAction("导出游戏", this, &MainWindow::onExportGame);
     toolsMenu->addAction("测试运行", this, &MainWindow::onTestRun);
+    toolsMenu->addAction("打开属性编辑器", this, &MainWindow::onShowPropertiesDock);
 
     auto *toolbar = addToolBar("主工具栏");
     toolbar->addAction("添加角色", this, &MainWindow::addCharacter);
     toolbar->addAction("添加背景", this, &MainWindow::addBackground);
     toolbar->addAction("添加对话", this, &MainWindow::onAddDialogue);
     toolbar->addAction("批量生成对话", this, &MainWindow::onBatchAddDialogues);
+    toolbar->addAction("属性编辑器", this, &MainWindow::onShowPropertiesDock);
     m_actionPreviewMode = toolbar->addAction("预览模式");
     m_actionPreviewMode->setCheckable(true);
     connect(m_actionPreviewMode, &QAction::toggled, this, &MainWindow::onTogglePreviewMode);
@@ -820,8 +1015,24 @@ void MainWindow::setupPropertyDock()
 
     auto *page0 = new QWidget();
     auto *page0Layout = new QVBoxLayout(page0);
-    m_emptyPropertyLabel = new QLabel("选择项目查看属性", page0);
+    m_emptyPropertyLabel = new QLabel("项目开始界面设置", page0);
     page0Layout->addWidget(m_emptyPropertyLabel);
+    auto *projectForm = new QFormLayout();
+    m_projectStartBgEdit = new QLineEdit(page0);
+    m_projectStartBgBrowseButton = new QPushButton("浏览...", page0);
+    auto *projectBgRow = new QHBoxLayout();
+    projectBgRow->addWidget(m_projectStartBgEdit);
+    projectBgRow->addWidget(m_projectStartBgBrowseButton);
+
+    m_projectStartBgmEdit = new QLineEdit(page0);
+    m_projectStartBgmBrowseButton = new QPushButton("浏览...", page0);
+    auto *projectBgmRow = new QHBoxLayout();
+    projectBgmRow->addWidget(m_projectStartBgmEdit);
+    projectBgmRow->addWidget(m_projectStartBgmBrowseButton);
+
+    projectForm->addRow("开始界面背景", projectBgRow);
+    projectForm->addRow("开始界面音乐", projectBgmRow);
+    page0Layout->addLayout(projectForm);
     page0Layout->addStretch(1);
     m_stackProperties->addWidget(page0);
 
@@ -849,6 +1060,11 @@ void MainWindow::setupPropertyDock()
     auto *bgImageRow = new QHBoxLayout();
     bgImageRow->addWidget(m_bgImageEdit);
     bgImageRow->addWidget(m_bgBrowseButton);
+    m_bgBgmEdit = new QLineEdit(page2);
+    m_bgBgmBrowseButton = new QPushButton("浏览...", page2);
+    auto *bgBgmRow = new QHBoxLayout();
+    bgBgmRow->addWidget(m_bgBgmEdit);
+    bgBgmRow->addWidget(m_bgBgmBrowseButton);
     m_bgStartSpin = new QSpinBox(page2);
     m_bgEndSpin = new QSpinBox(page2);
     m_bgStartSpin->setRange(1, 99999);
@@ -856,6 +1072,7 @@ void MainWindow::setupPropertyDock()
     m_bgConflictLabel = new QLabel(page2);
     m_bgConflictLabel->setStyleSheet("color:red;");
     form2->addRow("图片路径", bgImageRow);
+    form2->addRow("背景音乐", bgBgmRow);
     form2->addRow("起始句", m_bgStartSpin);
     form2->addRow("结束句", m_bgEndSpin);
     form2->addRow("冲突检测", m_bgConflictLabel);
@@ -866,11 +1083,15 @@ void MainWindow::setupPropertyDock()
     m_dialogueCharacterCombo = new QComboBox(page3);
     m_dialogueTextEdit = new QTextEdit(page3);
     m_dialogueVoiceEdit = new QLineEdit(page3);
+    m_dialogueVoiceBrowseButton = new QPushButton("浏览...", page3);
+    auto *dialogueVoiceRow = new QHBoxLayout();
+    dialogueVoiceRow->addWidget(m_dialogueVoiceEdit);
+    dialogueVoiceRow->addWidget(m_dialogueVoiceBrowseButton);
     m_dialogueEffectCombo = new QComboBox(page3);
     m_dialogueEffectCombo->addItems({"none", "shake", "flash", "fade"});
     form3->addRow("角色", m_dialogueCharacterCombo);
     form3->addRow("文本", m_dialogueTextEdit);
-    form3->addRow("语音文件", m_dialogueVoiceEdit);
+    form3->addRow("语音文件", dialogueVoiceRow);
     form3->addRow("特效", m_dialogueEffectCombo);
     m_stackProperties->addWidget(page3);
 
@@ -887,16 +1108,27 @@ void MainWindow::setupPropertyDock()
 
     connect(m_bgImageEdit, &QLineEdit::textEdited, this, &MainWindow::onBackgroundPropertiesChanged);
     connect(m_bgBrowseButton, &QPushButton::clicked, this, &MainWindow::onBrowseBackgroundImage);
+    connect(m_bgBgmEdit, &QLineEdit::textEdited, this, &MainWindow::onBackgroundPropertiesChanged);
+    connect(m_bgBgmBrowseButton, &QPushButton::clicked, this, &MainWindow::onBrowseBackgroundBgm);
     connect(m_bgStartSpin, &QSpinBox::valueChanged, this, &MainWindow::onBackgroundPropertiesChanged);
     connect(m_bgEndSpin, &QSpinBox::valueChanged, this, &MainWindow::onBackgroundPropertiesChanged);
     connect(m_bgImageEdit, &QLineEdit::editingFinished, this, [this]() { emit dataChanged(); });
+    connect(m_bgBgmEdit, &QLineEdit::editingFinished, this, [this]() { emit dataChanged(); });
     connect(m_bgStartSpin, &QSpinBox::editingFinished, this, [this]() { emit dataChanged(); });
     connect(m_bgEndSpin, &QSpinBox::editingFinished, this, [this]() { emit dataChanged(); });
 
     connect(m_dialogueCharacterCombo, &QComboBox::currentTextChanged, this, &MainWindow::onDialoguePropertiesChanged);
     connect(m_dialogueTextEdit, &QTextEdit::textChanged, this, &MainWindow::onDialoguePropertiesChanged);
     connect(m_dialogueVoiceEdit, &QLineEdit::textEdited, this, &MainWindow::onDialoguePropertiesChanged);
+    connect(m_dialogueVoiceBrowseButton, &QPushButton::clicked, this, &MainWindow::onBrowseDialogueVoice);
     connect(m_dialogueEffectCombo, &QComboBox::currentTextChanged, this, &MainWindow::onDialoguePropertiesChanged);
+
+    connect(m_projectStartBgEdit, &QLineEdit::textEdited, this, &MainWindow::onProjectPropertiesChanged);
+    connect(m_projectStartBgmEdit, &QLineEdit::textEdited, this, &MainWindow::onProjectPropertiesChanged);
+    connect(m_projectStartBgBrowseButton, &QPushButton::clicked, this, &MainWindow::onBrowseStartMenuBackground);
+    connect(m_projectStartBgmBrowseButton, &QPushButton::clicked, this, &MainWindow::onBrowseStartMenuBgm);
+    connect(m_projectStartBgEdit, &QLineEdit::editingFinished, this, [this]() { emit dataChanged(); });
+    connect(m_projectStartBgmEdit, &QLineEdit::editingFinished, this, [this]() { emit dataChanged(); });
 }
 
 void MainWindow::setupTimelineDock()
@@ -1034,6 +1266,8 @@ void MainWindow::refreshPropertyPage()
     }
 
     m_dialogueCharacterCombo->clear();
+    m_projectStartBgEdit->setText(m_project->startMenuBackgroundPath());
+    m_projectStartBgmEdit->setText(m_project->startMenuBgmPath());
     const QList<Character *> characters = m_project->characters();
     for (Character *character : characters) {
         m_dialogueCharacterCombo->addItem(character->name(), character->id());
@@ -1055,6 +1289,7 @@ void MainWindow::refreshPropertyPage()
     if (background) {
         m_stackProperties->setCurrentIndex(2);
         m_bgImageEdit->setText(background->imagePath());
+        m_bgBgmEdit->setText(background->bgmPath());
         m_bgStartSpin->setValue(background->startDialogueId());
         m_bgEndSpin->setValue(background->endDialogueId());
         refreshBackgroundConflictLabel(background);

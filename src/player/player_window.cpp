@@ -8,9 +8,12 @@
 #include <QGraphicsScene>
 #include <QGraphicsTextItem>
 #include <QGraphicsView>
+#include <QAudioOutput>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QMediaPlayer>
+#include <QUrl>
 #include <QEvent>
 #include <QDateTime>
 #include <QDialog>
@@ -21,15 +24,19 @@
 #include <QMessageBox>
 #include <QPushButton>
 #include <QResizeEvent>
+#include <QSlider>
 #include <QPainter>
 #include <QProcess>
+#include <QSettings>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTimer>
+#include <QVector>
 
 namespace {
 
 constexpr int kMaxSaveSlots = 3;
+constexpr const char *kBgmVolumeKey = "audio/bgmVolume";
 
 QPixmap makeNotFound(int w, int h)
 {
@@ -106,13 +113,26 @@ PlayerWindow::PlayerWindow(QWidget *parent)
     connect(&m_typewriter, &TypewriterEffect::textUpdated, this, &PlayerWindow::onTextUpdated);
     connect(&m_typewriter, &TypewriterEffect::finished, this, &PlayerWindow::onTextFinished);
 
-    m_saveButton = new QPushButton("保存进度", this);
+    m_saveButton = new QPushButton("设置", this);
     m_saveButton->setFixedHeight(34);
     m_saveButton->setCursor(Qt::PointingHandCursor);
     m_saveButton->setStyleSheet("QPushButton { background: rgba(0,0,0,150); color: white; border: 1px solid #777; border-radius: 6px; padding: 0 12px; }");
-    connect(m_saveButton, &QPushButton::clicked, this, &PlayerWindow::onSaveButtonClicked);
+    connect(m_saveButton, &QPushButton::clicked, this, &PlayerWindow::onSettingsButtonClicked);
     updateSaveButtonGeometry();
     m_saveButton->raise();
+
+    m_voicePlayer = new QMediaPlayer(this);
+    m_voiceOutput = new QAudioOutput(this);
+    m_voiceOutput->setVolume(1.0);
+    m_voicePlayer->setAudioOutput(m_voiceOutput);
+
+    m_bgmPlayer = new QMediaPlayer(this);
+    m_bgmOutput = new QAudioOutput(this);
+    QSettings settings;
+    const double savedBgmVolume = settings.value(kBgmVolumeKey, 0.55).toDouble();
+    m_bgmOutput->setVolume(qBound(0.0, savedBgmVolume, 1.0));
+    m_bgmPlayer->setAudioOutput(m_bgmOutput);
+    m_bgmPlayer->setLoops(QMediaPlayer::Infinite);
 }
 
 PlayerWindow::~PlayerWindow()
@@ -225,6 +245,91 @@ void PlayerWindow::onTextFinished()
 {
 }
 
+void PlayerWindow::onSettingsButtonClicked()
+{
+    bool requestBackToStart = false;
+    showSettingsDialog(&requestBackToStart);
+    if (!requestBackToStart) {
+        return;
+    }
+
+    enterStartScreenState();
+    QString error;
+    if (showStartMenu(&error)) {
+        renderCurrentLine();
+    }
+}
+
+void PlayerWindow::showSettingsDialog(bool *requestBackToStart)
+{
+    QDialog dialog(this);
+    dialog.setWindowTitle("设置");
+    dialog.setModal(true);
+    dialog.resize(380, 280);
+
+    auto *layout = new QVBoxLayout(&dialog);
+
+    auto *bgmLabel = new QLabel("背景音乐音量", &dialog);
+    layout->addWidget(bgmLabel);
+
+    auto *bgmSlider = new QSlider(Qt::Horizontal, &dialog);
+    bgmSlider->setRange(0, 100);
+    const int currentVolume = m_bgmOutput ? qRound(m_bgmOutput->volume() * 100.0) : 55;
+    bgmSlider->setValue(currentVolume);
+    layout->addWidget(bgmSlider);
+
+    auto *valueLabel = new QLabel(QString("%1%").arg(currentVolume), &dialog);
+    valueLabel->setAlignment(Qt::AlignRight);
+    layout->addWidget(valueLabel);
+
+    connect(bgmSlider, &QSlider::valueChanged, &dialog, [this, valueLabel](int value) {
+        if (m_bgmOutput) {
+            m_bgmOutput->setVolume(value / 100.0);
+        }
+        QSettings().setValue(kBgmVolumeKey, value / 100.0);
+        valueLabel->setText(QString("%1%").arg(value));
+    });
+
+    auto *saveProgressBtn = new QPushButton("保存游戏进度", &dialog);
+    connect(saveProgressBtn, &QPushButton::clicked, &dialog, [this]() {
+        onSaveButtonClicked();
+    });
+    layout->addWidget(saveProgressBtn);
+
+    auto *clearSavesBtn = new QPushButton("清空当前游戏存档", &dialog);
+    connect(clearSavesBtn, &QPushButton::clicked, &dialog, [this]() {
+        const auto ret = QMessageBox::question(this,
+                                               "确认清空",
+                                               "确定要清空当前游戏的 3 个存档位吗？此操作不可撤销。");
+        if (ret != QMessageBox::Yes) {
+            return;
+        }
+        QString error;
+        if (!clearAllSaveSlots(&error)) {
+            QMessageBox::warning(this, "清空失败", error);
+            return;
+        }
+        QMessageBox::information(this, "完成", "当前游戏存档已清空。");
+    });
+    layout->addWidget(clearSavesBtn);
+
+    auto *backToStartBtn = new QPushButton("回到开始界面", &dialog);
+    connect(backToStartBtn, &QPushButton::clicked, &dialog, [&dialog]() {
+        dialog.setProperty("requestBackToStart", true);
+        dialog.accept();
+    });
+    layout->addWidget(backToStartBtn);
+
+    auto *closeBtn = new QDialogButtonBox(QDialogButtonBox::Close, &dialog);
+    connect(closeBtn, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget(closeBtn);
+
+    dialog.exec();
+    if (requestBackToStart) {
+        *requestBackToStart = dialog.property("requestBackToStart").toBool();
+    }
+}
+
 void PlayerWindow::onSaveButtonClicked()
 {
     if (m_script.isEmpty()) {
@@ -314,10 +419,15 @@ bool PlayerWindow::loadFromDirectory(const QString &dirPath, QString *errorMsg)
         line.characterId = obj.value("char").toString();
         line.text = obj.value("text").toString();
         line.backgroundPath = obj.value("bgPath").toString();
+        line.bgmPath = obj.value("bgmPath").toString();
         line.voicePath = obj.value("voicePath").toString();
         line.portraitScale = obj.value("portraitScale").toInt(100);
         m_script.append(line);
     }
+
+    const QJsonObject startMenu = root.value("startMenu").toObject();
+    m_startMenuBackgroundPath = startMenu.value("bgPath").toString();
+    m_startMenuBgmPath = startMenu.value("bgmPath").toString();
 
     if (m_script.isEmpty()) {
         if (errorMsg) {
@@ -408,59 +518,155 @@ void PlayerWindow::renderCurrentLine()
         m_portraitItem->setVisible(true);
     }
 
+    playLineAudio(line);
     m_typewriter.start(line.text);
     updateViewTransform();
 }
 
+void PlayerWindow::playLineAudio(const RuntimeLine &line)
+{
+    if (m_bgmPlayer) {
+        const QString resolvedBgm = resolveAssetPath(line.bgmPath);
+        if (resolvedBgm.isEmpty()) {
+            if (!m_currentBgmPath.isEmpty()) {
+                m_bgmPlayer->stop();
+                m_currentBgmPath.clear();
+            }
+        } else if (resolvedBgm != m_currentBgmPath) {
+            m_currentBgmPath = resolvedBgm;
+            m_bgmPlayer->setSource(QUrl::fromLocalFile(resolvedBgm));
+            m_bgmPlayer->play();
+        } else if (m_bgmPlayer->playbackState() != QMediaPlayer::PlayingState) {
+            m_bgmPlayer->play();
+        }
+    }
+
+    if (m_voicePlayer) {
+        const QString resolvedVoice = resolveAssetPath(line.voicePath);
+        if (resolvedVoice.isEmpty()) {
+            m_voicePlayer->stop();
+        } else {
+            m_voicePlayer->setSource(QUrl::fromLocalFile(resolvedVoice));
+            m_voicePlayer->play();
+        }
+    }
+}
+
 bool PlayerWindow::showStartMenu(QString *errorMsg)
 {
+    enterStartScreenState();
+    const QString startBgAbs = resolveAssetPath(m_startMenuBackgroundPath);
+    if (!startBgAbs.isEmpty()) {
+        QPixmap bg(startBgAbs);
+        if (!bg.isNull() && m_backgroundItem) {
+            const QPixmap scaled = bg.scaled(1280, 720, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
+            m_backgroundItem->setPixmap(scaled);
+            m_backgroundItem->setPos((1280 - scaled.width()) / 2.0, (720 - scaled.height()) / 2.0);
+        }
+    }
+    const QString startBgmAbs = resolveAssetPath(m_startMenuBgmPath);
+    if (!startBgmAbs.isEmpty() && m_bgmPlayer) {
+        m_currentBgmPath = startBgmAbs;
+        m_bgmPlayer->setSource(QUrl::fromLocalFile(startBgmAbs));
+        m_bgmPlayer->play();
+    }
+    updateViewTransform();
+
     QDialog dialog(this);
     dialog.setWindowTitle(m_title.isEmpty() ? QString("开始游戏") : m_title);
     dialog.setModal(true);
     dialog.resize(520, 320);
+    dialog.setWindowFlag(Qt::FramelessWindowHint, true);
+    dialog.setAttribute(Qt::WA_TranslucentBackground, true);
 
     auto *layout = new QVBoxLayout(&dialog);
-    auto *titleLabel = new QLabel("请选择开始方式", &dialog);
+    layout->setContentsMargins(16, 16, 16, 16);
+
+    auto *panel = new QWidget(&dialog);
+    panel->setObjectName("startMenuPanel");
+    panel->setStyleSheet(
+        "#startMenuPanel {"
+        "background: rgba(0, 0, 0, 145);"
+        "border: 1px solid rgba(255, 255, 255, 80);"
+        "border-radius: 10px;"
+        "}"
+        "QLabel { color: white; }"
+        "QPushButton {"
+        "background: rgba(255, 255, 255, 28);"
+        "color: white;"
+        "border: 1px solid rgba(255,255,255,65);"
+        "border-radius: 6px;"
+        "padding: 6px 10px;"
+        "}"
+        "QPushButton:disabled {"
+        "color: rgba(255,255,255,120);"
+        "background: rgba(255,255,255,14);"
+        "border-color: rgba(255,255,255,35);"
+        "}"
+        "QPushButton:hover:!disabled { background: rgba(255, 255, 255, 44); }");
+    layout->addWidget(panel);
+
+    auto *panelLayout = new QVBoxLayout(panel);
+    auto *titleLabel = new QLabel("请选择开始方式", panel);
     titleLabel->setAlignment(Qt::AlignCenter);
     titleLabel->setStyleSheet("font-size:18px;font-weight:600;");
-    layout->addWidget(titleLabel);
+    panelLayout->addWidget(titleLabel);
 
     int selectedSlot = 0; // 0: 新游戏，1-3: 对应存档位
+    QVector<QPushButton *> slotButtons;
 
-    auto *newGameBtn = new QPushButton("新开始游戏", &dialog);
+    auto *newGameBtn = new QPushButton("新开始游戏", panel);
     newGameBtn->setMinimumHeight(42);
     connect(newGameBtn, &QPushButton::clicked, &dialog, [&dialog, &selectedSlot]() {
         selectedSlot = 0;
         dialog.accept();
     });
-    layout->addWidget(newGameBtn);
+    panelLayout->addWidget(newGameBtn);
 
+    auto *settingsBtn = new QPushButton("设置", panel);
+    settingsBtn->setMinimumHeight(36);
     for (int slot = 1; slot <= kMaxSaveSlots; ++slot) {
-        const SaveSlotMeta meta = readSaveSlotMeta(slot);
-        QString label;
-        if (meta.exists) {
-            label = QString("读取存档 %1（%2，第%3句）\n%4")
-                        .arg(slot)
-                        .arg(meta.timestamp)
-                        .arg(meta.index + 1)
-                        .arg(meta.preview);
-        } else {
-            label = QString("读取存档 %1（空）").arg(slot);
-        }
-
-        auto *btn = new QPushButton(label, &dialog);
+        auto *btn = new QPushButton(panel);
         btn->setMinimumHeight(52);
-        btn->setEnabled(meta.exists);
         connect(btn, &QPushButton::clicked, &dialog, [&dialog, &selectedSlot, slot]() {
             selectedSlot = slot;
             dialog.accept();
         });
-        layout->addWidget(btn);
+        slotButtons.append(btn);
+        panelLayout->addWidget(btn);
     }
+    panelLayout->addWidget(settingsBtn);
 
-    auto *cancelButtons = new QDialogButtonBox(QDialogButtonBox::Cancel, &dialog);
+    const auto refreshSlotButtons = [this, &slotButtons]() {
+        for (int slot = 1; slot <= kMaxSaveSlots; ++slot) {
+            if (slot - 1 < 0 || slot - 1 >= slotButtons.size()) {
+                continue;
+            }
+            QPushButton *btn = slotButtons.at(slot - 1);
+            const SaveSlotMeta meta = readSaveSlotMeta(slot);
+            if (meta.exists) {
+                btn->setText(QString("读取存档 %1（%2，第%3句）\n%4")
+                                 .arg(slot)
+                                 .arg(meta.timestamp)
+                                 .arg(meta.index + 1)
+                                 .arg(meta.preview));
+                btn->setEnabled(true);
+            } else {
+                btn->setText(QString("读取存档 %1（空）").arg(slot));
+                btn->setEnabled(false);
+            }
+        }
+    };
+
+    connect(settingsBtn, &QPushButton::clicked, &dialog, [this, &refreshSlotButtons]() {
+        showSettingsDialog();
+        refreshSlotButtons();
+    });
+    refreshSlotButtons();
+
+    auto *cancelButtons = new QDialogButtonBox(QDialogButtonBox::Cancel, panel);
     connect(cancelButtons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-    layout->addWidget(cancelButtons);
+    panelLayout->addWidget(cancelButtons);
 
     if (dialog.exec() != QDialog::Accepted) {
         if (errorMsg) {
@@ -475,6 +681,33 @@ bool PlayerWindow::showStartMenu(QString *errorMsg)
 
     m_currentIndex = 0;
     return true;
+}
+
+void PlayerWindow::enterStartScreenState()
+{
+    m_typewriter.cancel();
+    if (m_voicePlayer) {
+        m_voicePlayer->stop();
+    }
+    if (m_bgmPlayer) {
+        m_bgmPlayer->stop();
+    }
+    m_currentBgmPath.clear();
+
+    if (m_textItem) {
+        m_textItem->setPlainText(QString());
+    }
+    if (m_nameItem) {
+        m_nameItem->setPlainText(QString());
+    }
+    if (m_portraitItem) {
+        m_portraitItem->setVisible(false);
+        m_portraitItem->setPixmap(QPixmap());
+    }
+    if (m_backgroundItem) {
+        m_backgroundItem->setPixmap(QPixmap());
+        m_backgroundItem->setPos(0, 0);
+    }
 }
 
 bool PlayerWindow::saveToSlot(int slot, QString *errorMsg)
@@ -547,6 +780,29 @@ bool PlayerWindow::loadFromSlot(int slot, QString *errorMsg)
 
     const int idx = doc.object().value("index").toInt(0);
     m_currentIndex = qBound(0, idx, m_script.size() - 1);
+    return true;
+}
+
+bool PlayerWindow::clearAllSaveSlots(QString *errorMsg)
+{
+    bool removedAny = false;
+    for (int slot = 1; slot <= kMaxSaveSlots; ++slot) {
+        const QString savePath = slotSavePath(slot);
+        if (QFileInfo::exists(savePath)) {
+            if (!QFile::remove(savePath)) {
+                if (errorMsg) {
+                    *errorMsg = QString("删除存档 %1 失败。").arg(slot);
+                }
+                return false;
+            }
+            removedAny = true;
+        }
+    }
+
+    QDir saveDir(gameSaveDir());
+    if (removedAny && saveDir.exists()) {
+        saveDir.rmdir(".");
+    }
     return true;
 }
 
