@@ -11,7 +11,7 @@ class QGraphicsPixmapItem;
 class QGraphicsRectItem;
 class QGraphicsTextItem;
 class QTemporaryDir;
-class QJsonObject;
+class QPushButton;
 class QKeyEvent;
 class QResizeEvent;
 class QEvent;
@@ -37,8 +37,16 @@ private slots:
     void onAdvanceRequested();
     void onTextUpdated(const QString &text);
     void onTextFinished();
+    void onSaveButtonClicked();
 
 private:
+    struct SaveSlotMeta {
+        bool exists = false;
+        int index = 0;
+        QString timestamp;
+        QString preview;
+    };
+
     struct RuntimeLine {
         int id = 0;
         QString characterId;
@@ -50,6 +58,13 @@ private:
 
     bool loadFromDirectory(const QString &dirPath, QString *errorMsg);
     bool extractPackageToTemp(const QString &packagePath, QString *outDir, QString *errorMsg);
+    bool showStartMenu(QString *errorMsg);
+    bool saveToSlot(int slot, QString *errorMsg);
+    bool loadFromSlot(int slot, QString *errorMsg);
+    SaveSlotMeta readSaveSlotMeta(int slot) const;
+    QString gameSaveDir() const;
+    QString slotSavePath(int slot) const;
+    void updateSaveButtonGeometry();
     void renderCurrentLine();
     void updateViewTransform();
     void toggleFullScreenMode();
@@ -64,6 +79,7 @@ private:
     QGraphicsRectItem *m_dialogBox = nullptr;
     QGraphicsTextItem *m_nameItem = nullptr;
     QGraphicsTextItem *m_textItem = nullptr;
+    QPushButton *m_saveButton = nullptr;
 
     TypewriterEffect m_typewriter;
     bool m_fullScreen = false;
@@ -76,6 +92,8 @@ private:
     QHash<QString, QString> m_charDisplayNames;
     QHash<QString, QString> m_charPortraitPaths;
     int m_currentIndex = 0;
+    bool m_startMenuPending = false;
+    bool m_startMenuShown = false;
 };
 
 #endif // PLAYER_WINDOW_H

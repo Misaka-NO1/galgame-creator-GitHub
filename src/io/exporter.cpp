@@ -400,21 +400,44 @@ bool copyPlayerRuntimeDependencies(const QString &rootDir, const QString &player
 bool writeLauncherScript(const QString &rootDir, QString *errorMsg)
 {
 #ifdef Q_OS_WIN
-    const QString launcherPath = QDir(rootDir).filePath("启动游戏.bat");
-    QFile launcher(launcherPath);
-    if (!launcher.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+    const QString launcherBatPath = QDir(rootDir).filePath("启动游戏.bat");
+    QFile launcherBat(launcherBatPath);
+    if (!launcherBat.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
         if (errorMsg) {
             *errorMsg = "无法创建启动脚本。";
         }
         return false;
     }
-    const QByteArray content =
+    const QByteArray batContent =
         "@echo off\r\n"
         "setlocal\r\n"
         "set \"ROOT=%~dp0\"\r\n"
         "set \"ROOT=%ROOT:~0,-1%\"\r\n"
         "\"%ROOT%\\galplayer.exe\" \"%ROOT%\"\r\n";
-    launcher.write(content);
+    launcherBat.write(batContent);
+    launcherBat.close();
+
+    // 默认无终端启动器：双击只保留游戏界面。
+    const QString launcherVbsPath = QDir(rootDir).filePath("启动游戏.vbs");
+    QFile launcherVbs(launcherVbsPath);
+    if (!launcherVbs.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        if (errorMsg) {
+            *errorMsg = "无法创建无终端启动脚本。";
+        }
+        return false;
+    }
+    const QByteArray vbsContent =
+        "Set fso = CreateObject(\"Scripting.FileSystemObject\")\r\n"
+        "Set shell = CreateObject(\"WScript.Shell\")\r\n"
+        "root = fso.GetParentFolderName(WScript.ScriptFullName)\r\n"
+        "exe = root & \"\\\\galplayer.exe\"\r\n"
+        "If Not fso.FileExists(exe) Then\r\n"
+        "  MsgBox \"galplayer.exe not found: \" & exe, 16, \"Start Failed\"\r\n"
+        "  WScript.Quit 1\r\n"
+        "End If\r\n"
+        "shell.CurrentDirectory = root\r\n"
+        "shell.Run Chr(34) & exe & Chr(34) & \" \" & Chr(34) & root & Chr(34), 1, False\r\n";
+    launcherVbs.write(vbsContent);
     return true;
 #else
     const QString launcherPath = QDir(rootDir).filePath("run_game.sh");
@@ -891,7 +914,11 @@ void ExportDialog::onExportClicked()
     }
 
     m_statusLabel->setText("导出完成");
+#ifdef Q_OS_WIN
+    QMessageBox::information(this, "完成", "导出成功。\n请双击“启动游戏.vbs”启动（无终端窗口）。");
+#else
     QMessageBox::information(this, "完成", "导出成功。");
+#endif
 }
 
 ExportOptions ExportDialog::buildOptions() const

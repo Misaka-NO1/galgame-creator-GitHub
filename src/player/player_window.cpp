@@ -12,7 +12,14 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QEvent>
+#include <QDateTime>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QKeyEvent>
+#include <QLabel>
+#include <QLayout>
+#include <QMessageBox>
+#include <QPushButton>
 #include <QResizeEvent>
 #include <QPainter>
 #include <QProcess>
@@ -21,6 +28,8 @@
 #include <QTimer>
 
 namespace {
+
+constexpr int kMaxSaveSlots = 3;
 
 QPixmap makeNotFound(int w, int h)
 {
@@ -34,6 +43,16 @@ QPixmap makeNotFound(int w, int h)
     p.setFont(f);
     p.drawText(QRect(0, 0, w, h), Qt::AlignCenter, "Image Not Found");
     return pm;
+}
+
+QString simplifyPreviewText(const QString &text)
+{
+    QString preview = text.trimmed();
+    preview.replace('\n', ' ');
+    if (preview.size() > 16) {
+        preview = preview.left(16) + "...";
+    }
+    return preview;
 }
 
 } // namespace
@@ -86,6 +105,14 @@ PlayerWindow::PlayerWindow(QWidget *parent)
     m_typewriter.setSpeed(20);
     connect(&m_typewriter, &TypewriterEffect::textUpdated, this, &PlayerWindow::onTextUpdated);
     connect(&m_typewriter, &TypewriterEffect::finished, this, &PlayerWindow::onTextFinished);
+
+    m_saveButton = new QPushButton("保存进度", this);
+    m_saveButton->setFixedHeight(34);
+    m_saveButton->setCursor(Qt::PointingHandCursor);
+    m_saveButton->setStyleSheet("QPushButton { background: rgba(0,0,0,150); color: white; border: 1px solid #777; border-radius: 6px; padding: 0 12px; }");
+    connect(m_saveButton, &QPushButton::clicked, this, &PlayerWindow::onSaveButtonClicked);
+    updateSaveButtonGeometry();
+    m_saveButton->raise();
 }
 
 PlayerWindow::~PlayerWindow()
@@ -144,6 +171,7 @@ void PlayerWindow::keyPressEvent(QKeyEvent *event)
 void PlayerWindow::resizeEvent(QResizeEvent *event)
 {
     QMainWindow::resizeEvent(event);
+    updateSaveButtonGeometry();
     updateViewTransform();
 }
 
@@ -153,6 +181,16 @@ void PlayerWindow::showEvent(QShowEvent *event)
     // 首次显示后再执行一次 fit，避免首帧窗口尺寸未稳定导致画面偏小。
     QTimer::singleShot(0, this, [this]() {
         updateViewTransform();
+        if (!m_startMenuPending || m_startMenuShown || m_script.isEmpty()) {
+            return;
+        }
+        m_startMenuShown = true;
+        QString startError;
+        if (!showStartMenu(&startError)) {
+            close();
+            return;
+        }
+        renderCurrentLine();
     });
 }
 
@@ -185,6 +223,53 @@ void PlayerWindow::onTextUpdated(const QString &text)
 
 void PlayerWindow::onTextFinished()
 {
+}
+
+void PlayerWindow::onSaveButtonClicked()
+{
+    if (m_script.isEmpty()) {
+        return;
+    }
+
+    QDialog dialog(this);
+    dialog.setWindowTitle("保存进度");
+    dialog.setModal(true);
+
+    auto *layout = new QVBoxLayout(&dialog);
+    layout->addWidget(new QLabel("选择要保存到的存档位（最多 3 个）：", &dialog));
+
+    int selectedSlot = 0;
+    for (int slot = 1; slot <= kMaxSaveSlots; ++slot) {
+        const SaveSlotMeta meta = readSaveSlotMeta(slot);
+        QString label = QString("存档 %1").arg(slot);
+        if (meta.exists) {
+            label += QString("（覆盖：%1，第%2句）").arg(meta.timestamp).arg(meta.index + 1);
+        } else {
+            label += "（空）";
+        }
+
+        auto *btn = new QPushButton(label, &dialog);
+        connect(btn, &QPushButton::clicked, &dialog, [&dialog, &selectedSlot, slot]() {
+            selectedSlot = slot;
+            dialog.accept();
+        });
+        layout->addWidget(btn);
+    }
+
+    auto *cancel = new QDialogButtonBox(QDialogButtonBox::Cancel, &dialog);
+    connect(cancel, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget(cancel);
+
+    if (dialog.exec() != QDialog::Accepted || selectedSlot <= 0) {
+        return;
+    }
+
+    QString error;
+    if (!saveToSlot(selectedSlot, &error)) {
+        QMessageBox::warning(this, "保存失败", error);
+        return;
+    }
+    QMessageBox::information(this, "保存成功", QString("已保存到存档 %1。").arg(selectedSlot));
 }
 
 bool PlayerWindow::loadFromDirectory(const QString &dirPath, QString *errorMsg)
@@ -242,7 +327,8 @@ bool PlayerWindow::loadFromDirectory(const QString &dirPath, QString *errorMsg)
     }
 
     m_currentIndex = 0;
-    renderCurrentLine();
+    m_startMenuPending = true;
+    m_startMenuShown = false;
     return true;
 }
 
@@ -326,6 +412,197 @@ void PlayerWindow::renderCurrentLine()
     updateViewTransform();
 }
 
+bool PlayerWindow::showStartMenu(QString *errorMsg)
+{
+    QDialog dialog(this);
+    dialog.setWindowTitle(m_title.isEmpty() ? QString("开始游戏") : m_title);
+    dialog.setModal(true);
+    dialog.resize(520, 320);
+
+    auto *layout = new QVBoxLayout(&dialog);
+    auto *titleLabel = new QLabel("请选择开始方式", &dialog);
+    titleLabel->setAlignment(Qt::AlignCenter);
+    titleLabel->setStyleSheet("font-size:18px;font-weight:600;");
+    layout->addWidget(titleLabel);
+
+    int selectedSlot = 0; // 0: 新游戏，1-3: 对应存档位
+
+    auto *newGameBtn = new QPushButton("新开始游戏", &dialog);
+    newGameBtn->setMinimumHeight(42);
+    connect(newGameBtn, &QPushButton::clicked, &dialog, [&dialog, &selectedSlot]() {
+        selectedSlot = 0;
+        dialog.accept();
+    });
+    layout->addWidget(newGameBtn);
+
+    for (int slot = 1; slot <= kMaxSaveSlots; ++slot) {
+        const SaveSlotMeta meta = readSaveSlotMeta(slot);
+        QString label;
+        if (meta.exists) {
+            label = QString("读取存档 %1（%2，第%3句）\n%4")
+                        .arg(slot)
+                        .arg(meta.timestamp)
+                        .arg(meta.index + 1)
+                        .arg(meta.preview);
+        } else {
+            label = QString("读取存档 %1（空）").arg(slot);
+        }
+
+        auto *btn = new QPushButton(label, &dialog);
+        btn->setMinimumHeight(52);
+        btn->setEnabled(meta.exists);
+        connect(btn, &QPushButton::clicked, &dialog, [&dialog, &selectedSlot, slot]() {
+            selectedSlot = slot;
+            dialog.accept();
+        });
+        layout->addWidget(btn);
+    }
+
+    auto *cancelButtons = new QDialogButtonBox(QDialogButtonBox::Cancel, &dialog);
+    connect(cancelButtons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget(cancelButtons);
+
+    if (dialog.exec() != QDialog::Accepted) {
+        if (errorMsg) {
+            *errorMsg = "已取消启动游戏。";
+        }
+        return false;
+    }
+
+    if (selectedSlot > 0) {
+        return loadFromSlot(selectedSlot, errorMsg);
+    }
+
+    m_currentIndex = 0;
+    return true;
+}
+
+bool PlayerWindow::saveToSlot(int slot, QString *errorMsg)
+{
+    if (slot < 1 || slot > kMaxSaveSlots) {
+        if (errorMsg) {
+            *errorMsg = "无效的存档位。";
+        }
+        return false;
+    }
+    if (m_script.isEmpty() || m_currentIndex < 0 || m_currentIndex >= m_script.size()) {
+        if (errorMsg) {
+            *errorMsg = "当前没有可保存的进度。";
+        }
+        return false;
+    }
+
+    const QString saveDir = gameSaveDir();
+    if (!QDir().mkpath(saveDir)) {
+        if (errorMsg) {
+            *errorMsg = "无法创建存档目录。";
+        }
+        return false;
+    }
+
+    const RuntimeLine &line = m_script.at(m_currentIndex);
+    QJsonObject save;
+    save["version"] = 1;
+    save["slot"] = slot;
+    save["index"] = m_currentIndex;
+    save["time"] = QDateTime::currentDateTime().toString(Qt::ISODate);
+    save["preview"] = simplifyPreviewText(line.text);
+
+    QFile file(slotSavePath(slot));
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        if (errorMsg) {
+            *errorMsg = "写入存档失败。";
+        }
+        return false;
+    }
+    file.write(QJsonDocument(save).toJson(QJsonDocument::Compact));
+    return true;
+}
+
+bool PlayerWindow::loadFromSlot(int slot, QString *errorMsg)
+{
+    if (slot < 1 || slot > kMaxSaveSlots) {
+        if (errorMsg) {
+            *errorMsg = "无效的存档位。";
+        }
+        return false;
+    }
+
+    QFile file(slotSavePath(slot));
+    if (!file.open(QIODevice::ReadOnly)) {
+        if (errorMsg) {
+            *errorMsg = QString("读取存档 %1 失败。").arg(slot);
+        }
+        return false;
+    }
+
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
+        if (errorMsg) {
+            *errorMsg = QString("存档 %1 已损坏。").arg(slot);
+        }
+        return false;
+    }
+
+    const int idx = doc.object().value("index").toInt(0);
+    m_currentIndex = qBound(0, idx, m_script.size() - 1);
+    return true;
+}
+
+PlayerWindow::SaveSlotMeta PlayerWindow::readSaveSlotMeta(int slot) const
+{
+    SaveSlotMeta meta;
+    QFile file(slotSavePath(slot));
+    if (!file.open(QIODevice::ReadOnly)) {
+        return meta;
+    }
+
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
+        return meta;
+    }
+
+    const QJsonObject obj = doc.object();
+    meta.exists = true;
+    meta.index = obj.value("index").toInt(0);
+    meta.timestamp = obj.value("time").toString();
+    meta.preview = obj.value("preview").toString();
+    return meta;
+}
+
+QString PlayerWindow::gameSaveDir() const
+{
+    QString key = m_packagePath.trimmed();
+    if (key.isEmpty()) {
+        key = m_baseDir;
+    }
+    key = QDir::cleanPath(key).toLower();
+    key.replace(':', '_');
+    key.replace('/', '_');
+    key.replace('\\', '_');
+
+    const QString base = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    return QDir(base).filePath(QString("saves/%1").arg(key));
+}
+
+QString PlayerWindow::slotSavePath(int slot) const
+{
+    return QDir(gameSaveDir()).filePath(QString("slot_%1.json").arg(slot));
+}
+
+void PlayerWindow::updateSaveButtonGeometry()
+{
+    if (!m_saveButton) {
+        return;
+    }
+    const int margin = 14;
+    const int buttonWidth = 112;
+    m_saveButton->setFixedWidth(buttonWidth);
+    m_saveButton->move(this->width() - buttonWidth - margin, margin);
+}
+
 void PlayerWindow::updateViewTransform()
 {
     if (!m_view || !m_scene) {
@@ -348,43 +625,16 @@ void PlayerWindow::toggleFullScreenMode()
 
 void PlayerWindow::saveQuickSlot()
 {
-    const QString dir = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
-    QDir().mkpath(dir);
-    QFile file(QDir(dir).filePath("galplayer.save"));
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        return;
-    }
-
-    QJsonObject save;
-    save["game"] = m_packagePath;
-    save["index"] = m_currentIndex;
-    file.write(QJsonDocument(save).toJson(QJsonDocument::Compact));
+    QString error;
+    saveToSlot(1, &error);
 }
 
 void PlayerWindow::loadQuickSlot()
 {
-    const QString dir = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
-    QFile file(QDir(dir).filePath("galplayer.save"));
-    if (!file.open(QIODevice::ReadOnly)) {
-        return;
+    QString error;
+    if (loadFromSlot(1, &error)) {
+        renderCurrentLine();
     }
-
-    QJsonParseError e;
-    const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &e);
-    if (e.error != QJsonParseError::NoError || !doc.isObject()) {
-        return;
-    }
-
-    const QJsonObject save = doc.object();
-    const QString game = save.value("game").toString();
-    int idx = save.value("index").toInt(0);
-
-    QString err;
-    if (!game.isEmpty()) {
-        loadGame(game, &err);
-    }
-    m_currentIndex = qBound(0, idx, m_script.size() - 1);
-    renderCurrentLine();
 }
 
 QString PlayerWindow::resolveAssetPath(const QString &assetRelPath) const
