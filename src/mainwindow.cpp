@@ -11,6 +11,7 @@
 #include <QAbstractListModel>
 #include <QAction>
 #include <QComboBox>
+#include <QColorDialog>
 #include <QDialog>
 #include <QDockWidget>
 #include <QFileDialog>
@@ -275,12 +276,14 @@ void MainWindow::onTreeContextMenuRequested(const QPoint &pos)
     if (!item) {
         contextMenu.addAction("添加角色", this, &MainWindow::addCharacter);
         contextMenu.addAction("添加背景", this, &MainWindow::addBackground);
+        contextMenu.addAction("添加背景音乐", this, &MainWindow::onAddBackgroundMusic);
     } else {
         const TreeItemType type = itemType(item);
 
         if (type == TreeItemType::Root) {
             contextMenu.addAction("添加角色", this, &MainWindow::addCharacter);
             contextMenu.addAction("添加背景", this, &MainWindow::addBackground);
+            contextMenu.addAction("添加背景音乐", this, &MainWindow::onAddBackgroundMusic);
         } else if (type == TreeItemType::CharactersGroup || type == TreeItemType::Character) {
             contextMenu.addAction("添加角色", this, &MainWindow::addCharacter);
             if (type == TreeItemType::Character) {
@@ -288,8 +291,14 @@ void MainWindow::onTreeContextMenuRequested(const QPoint &pos)
             }
         } else if (type == TreeItemType::BackgroundsGroup || type == TreeItemType::Background) {
             contextMenu.addAction("添加背景", this, &MainWindow::addBackground);
+            contextMenu.addAction("添加背景音乐", this, &MainWindow::onAddBackgroundMusic);
             if (type == TreeItemType::Background) {
                 contextMenu.addAction("删除背景", this, &MainWindow::onDeleteSelectedItem);
+            }
+        } else if (type == TreeItemType::BgmsGroup || type == TreeItemType::BgmTrack) {
+            contextMenu.addAction("添加背景音乐", this, &MainWindow::onAddBackgroundMusic);
+            if (type == TreeItemType::BgmTrack) {
+                contextMenu.addAction("清空背景音乐", this, &MainWindow::onDeleteSelectedItem);
             }
         } else if (type == TreeItemType::Dialogue) {
             contextMenu.addAction("删除对话", this, &MainWindow::onDeleteSelectedItem);
@@ -413,6 +422,11 @@ void MainWindow::onSaveProject()
 void MainWindow::onAddDialogue()
 {
     addDialogue();
+}
+
+void MainWindow::onAddBackgroundMusic()
+{
+    addBackgroundMusic();
 }
 
 void MainWindow::onBatchAddDialogues()
@@ -636,6 +650,20 @@ void MainWindow::onShowPropertiesDock()
     }
 }
 
+void MainWindow::onOpenProjectStyleEditor()
+{
+    onShowPropertiesDock();
+    if (!m_stackProperties) {
+        return;
+    }
+    m_stackProperties->setCurrentIndex(0);
+    if (m_treeResources && m_rootItem) {
+        m_treeResources->setCurrentItem(m_rootItem);
+        m_treeResources->scrollToItem(m_rootItem);
+    }
+    refreshPropertyPage();
+}
+
 void MainWindow::onProjectPropertiesChanged()
 {
     if (m_updatingPropertyWidgets || !m_project) {
@@ -643,6 +671,12 @@ void MainWindow::onProjectPropertiesChanged()
     }
     m_project->setStartMenuBackgroundPath(m_projectStartBgEdit->text().trimmed());
     m_project->setStartMenuBgmPath(m_projectStartBgmEdit->text().trimmed());
+    m_project->setStartMenuFontSize(m_projectStartFontSizeSpin->value());
+    m_project->setStartMenuFontColor(m_projectStartFontColorEdit->text().trimmed());
+    m_project->setDialogueNameFontSize(m_projectDialogueNameFontSizeSpin->value());
+    m_project->setDialogueNameFontColor(m_projectDialogueNameFontColorEdit->text().trimmed());
+    m_project->setDialogueTextFontSize(m_projectDialogueTextFontSizeSpin->value());
+    m_project->setDialogueTextFontColor(m_projectDialogueTextFontColorEdit->text().trimmed());
 }
 
 void MainWindow::onCharacterPropertiesChanged()
@@ -671,6 +705,21 @@ void MainWindow::onBackgroundPropertiesChanged()
         return;
     }
 
+    BgmTrack *bgmTrack = selectedBgmTrack();
+    if (bgmTrack) {
+        int bgmStart = m_bgBgmStartSpin->value();
+        int bgmEnd = m_bgBgmEndSpin->value();
+        if (bgmStart > bgmEnd) {
+            std::swap(bgmStart, bgmEnd);
+            m_bgBgmStartSpin->setValue(bgmStart);
+            m_bgBgmEndSpin->setValue(bgmEnd);
+        }
+        bgmTrack->setBgmPath(m_bgBgmEdit->text().trimmed());
+        bgmTrack->setStartDialogueId(bgmStart);
+        bgmTrack->setEndDialogueId(bgmEnd);
+        return;
+    }
+
     Background *background = selectedBackground();
     if (!background) {
         return;
@@ -688,6 +737,15 @@ void MainWindow::onBackgroundPropertiesChanged()
     background->setBgmPath(m_bgBgmEdit->text().trimmed());
     background->setStartDialogueId(start);
     background->setEndDialogueId(end);
+    int bgmStart = m_bgBgmStartSpin->value();
+    int bgmEnd = m_bgBgmEndSpin->value();
+    if (bgmStart > bgmEnd) {
+        std::swap(bgmStart, bgmEnd);
+        m_bgBgmStartSpin->setValue(bgmStart);
+        m_bgBgmEndSpin->setValue(bgmEnd);
+    }
+    background->setBgmStartDialogueId(bgmStart);
+    background->setBgmEndDialogueId(bgmEnd);
     refreshBackgroundConflictLabel(background);
 
     // 背景行号输入过程中不做全量刷新，避免控件重建导致焦点丢失。
@@ -707,13 +765,42 @@ void MainWindow::onDialoguePropertiesChanged()
     dialogue->setCharacterId(m_dialogueCharacterCombo->currentData().toString());
     dialogue->setText(m_dialogueTextEdit->toPlainText());
     dialogue->setVoiceFile(m_dialogueVoiceEdit->text().trimmed());
+    dialogue->setNameFontSizeOverride(m_dialogueNameFontSizeSpin->value());
+    dialogue->setNameFontColorOverride(m_dialogueNameFontColorEdit->text().trimmed());
+    dialogue->setTextFontSizeOverride(m_dialogueTextFontSizeSpin->value());
+    dialogue->setTextFontColorOverride(m_dialogueTextFontColorEdit->text().trimmed());
     dialogue->setSpecialEffect(textToEffect(m_dialogueEffectCombo->currentText()));
 
     // 文本输入过程中不做全量刷新，避免重建树/属性页导致编辑焦点丢失。
     QObject *trigger = sender();
-    if (trigger == m_dialogueCharacterCombo || trigger == m_dialogueEffectCombo) {
+    if (trigger == m_dialogueCharacterCombo
+        || trigger == m_dialogueEffectCombo) {
         emit dataChanged();
     }
+}
+
+void MainWindow::onPickDialogueLineNameFontColor()
+{
+    const QColor picked = QColorDialog::getColor(QColor(m_dialogueNameFontColorEdit->text().trimmed()),
+                                                 this,
+                                                 "选择该句姓名颜色");
+    if (!picked.isValid()) {
+        return;
+    }
+    m_dialogueNameFontColorEdit->setText(picked.name(QColor::HexRgb).toUpper());
+    onDialoguePropertiesChanged();
+}
+
+void MainWindow::onPickDialogueLineTextFontColor()
+{
+    const QColor picked = QColorDialog::getColor(QColor(m_dialogueTextFontColorEdit->text().trimmed()),
+                                                 this,
+                                                 "选择该句对白颜色");
+    if (!picked.isValid()) {
+        return;
+    }
+    m_dialogueTextFontColorEdit->setText(picked.name(QColor::HexRgb).toUpper());
+    onDialoguePropertiesChanged();
 }
 
 void MainWindow::onBrowseBackgroundImage()
@@ -767,8 +854,9 @@ void MainWindow::onBrowseBackgroundBgm()
     }
 
     Background *background = selectedBackground();
-    if (!background) {
-        QMessageBox::information(this, "提示", "请先在左侧选择一个背景。");
+    BgmTrack *bgmTrack = selectedBgmTrack();
+    if (!background && !bgmTrack) {
+        QMessageBox::information(this, "提示", "请先在左侧选择一个背景或背景音乐轨道。");
         return;
     }
 
@@ -792,7 +880,8 @@ void MainWindow::onBrowseBackgroundBgm()
 
     const QFileInfo sourceInfo(sourcePath);
     const QString ext = sourceInfo.suffix().isEmpty() ? "ogg" : sourceInfo.suffix();
-    const QString fileName = QString("bgm_%1.%2").arg(background->id(), ext);
+    const QString baseId = bgmTrack ? bgmTrack->id() : background->id();
+    const QString fileName = QString("bgm_%1.%2").arg(baseId, ext);
     const QString relativePath = QDir::cleanPath(QString("resources/bgm/%1").arg(fileName));
     const QString absoluteTarget = projectDir.filePath(relativePath);
 
@@ -802,7 +891,11 @@ void MainWindow::onBrowseBackgroundBgm()
         return;
     }
 
-    background->setBgmPath(relativePath);
+    if (bgmTrack) {
+        bgmTrack->setBgmPath(relativePath);
+    } else {
+        background->setBgmPath(relativePath);
+    }
     m_bgBgmEdit->setText(relativePath);
     emit dataChanged();
 }
@@ -931,6 +1024,45 @@ void MainWindow::onBrowseStartMenuBgm()
     emit dataChanged();
 }
 
+void MainWindow::onPickStartMenuFontColor()
+{
+    const QColor picked = QColorDialog::getColor(QColor(m_projectStartFontColorEdit->text().trimmed()),
+                                                 this,
+                                                 "选择开始界面字体颜色");
+    if (!picked.isValid()) {
+        return;
+    }
+    m_projectStartFontColorEdit->setText(picked.name(QColor::HexRgb).toUpper());
+    onProjectPropertiesChanged();
+    emit dataChanged();
+}
+
+void MainWindow::onPickDialogueNameFontColor()
+{
+    const QColor picked = QColorDialog::getColor(QColor(m_projectDialogueNameFontColorEdit->text().trimmed()),
+                                                 this,
+                                                 "选择对话姓名颜色");
+    if (!picked.isValid()) {
+        return;
+    }
+    m_projectDialogueNameFontColorEdit->setText(picked.name(QColor::HexRgb).toUpper());
+    onProjectPropertiesChanged();
+    emit dataChanged();
+}
+
+void MainWindow::onPickDialogueTextFontColor()
+{
+    const QColor picked = QColorDialog::getColor(QColor(m_projectDialogueTextFontColorEdit->text().trimmed()),
+                                                 this,
+                                                 "选择对话文本颜色");
+    if (!picked.isValid()) {
+        return;
+    }
+    m_projectDialogueTextFontColorEdit->setText(picked.name(QColor::HexRgb).toUpper());
+    onProjectPropertiesChanged();
+    emit dataChanged();
+}
+
 void MainWindow::onDeleteSelectedItem()
 {
     QTreeWidgetItem *item = m_treeResources ? m_treeResources->currentItem() : nullptr;
@@ -943,6 +1075,8 @@ void MainWindow::onDeleteSelectedItem()
         deleteCharacter(valueToPtr<Character>(item->data(0, kTreePointerRole)));
     } else if (type == TreeItemType::Background) {
         deleteBackground(valueToPtr<Background>(item->data(0, kTreePointerRole)));
+    } else if (type == TreeItemType::BgmTrack) {
+        clearBackgroundBgm(valueToPtr<BgmTrack>(item->data(0, kTreePointerRole)));
     } else if (type == TreeItemType::Dialogue) {
         deleteDialogue(valueToPtr<Dialogue>(item->data(0, kTreePointerRole)));
     }
@@ -966,6 +1100,7 @@ void MainWindow::setupMenusAndToolbar()
     auto *editMenu = menuBar()->addMenu("编辑");
     editMenu->addAction("添加角色", this, &MainWindow::addCharacter);
     editMenu->addAction("添加背景", this, &MainWindow::addBackground);
+    editMenu->addAction("添加背景音乐", this, &MainWindow::onAddBackgroundMusic);
     editMenu->addAction("添加对话", this, &MainWindow::onAddDialogue);
     editMenu->addAction("批量生成对话", this, &MainWindow::onBatchAddDialogues);
 
@@ -973,13 +1108,16 @@ void MainWindow::setupMenusAndToolbar()
     toolsMenu->addAction("导出游戏", this, &MainWindow::onExportGame);
     toolsMenu->addAction("测试运行", this, &MainWindow::onTestRun);
     toolsMenu->addAction("打开属性编辑器", this, &MainWindow::onShowPropertiesDock);
+    toolsMenu->addAction("开始界面与字体样式", this, &MainWindow::onOpenProjectStyleEditor);
 
     auto *toolbar = addToolBar("主工具栏");
     toolbar->addAction("添加角色", this, &MainWindow::addCharacter);
     toolbar->addAction("添加背景", this, &MainWindow::addBackground);
+    toolbar->addAction("添加背景音乐", this, &MainWindow::onAddBackgroundMusic);
     toolbar->addAction("添加对话", this, &MainWindow::onAddDialogue);
     toolbar->addAction("批量生成对话", this, &MainWindow::onBatchAddDialogues);
     toolbar->addAction("属性编辑器", this, &MainWindow::onShowPropertiesDock);
+    toolbar->addAction("样式设置", this, &MainWindow::onOpenProjectStyleEditor);
     m_actionPreviewMode = toolbar->addAction("预览模式");
     m_actionPreviewMode->setCheckable(true);
     connect(m_actionPreviewMode, &QAction::toggled, this, &MainWindow::onTogglePreviewMode);
@@ -1030,8 +1168,42 @@ void MainWindow::setupPropertyDock()
     projectBgmRow->addWidget(m_projectStartBgmEdit);
     projectBgmRow->addWidget(m_projectStartBgmBrowseButton);
 
+    m_projectStartFontSizeSpin = new QSpinBox(page0);
+    m_projectStartFontSizeSpin->setRange(8, 96);
+    m_projectStartFontSizeSpin->setValue(22);
+
+    m_projectStartFontColorEdit = new QLineEdit(page0);
+    m_projectStartFontColorButton = new QPushButton("取色...", page0);
+    auto *projectStartFontColorRow = new QHBoxLayout();
+    projectStartFontColorRow->addWidget(m_projectStartFontColorEdit);
+    projectStartFontColorRow->addWidget(m_projectStartFontColorButton);
+
+    m_projectDialogueNameFontSizeSpin = new QSpinBox(page0);
+    m_projectDialogueNameFontSizeSpin->setRange(8, 96);
+    m_projectDialogueNameFontSizeSpin->setValue(14);
+    m_projectDialogueNameFontColorEdit = new QLineEdit(page0);
+    m_projectDialogueNameFontColorButton = new QPushButton("取色...", page0);
+    auto *projectDialogueNameColorRow = new QHBoxLayout();
+    projectDialogueNameColorRow->addWidget(m_projectDialogueNameFontColorEdit);
+    projectDialogueNameColorRow->addWidget(m_projectDialogueNameFontColorButton);
+
+    m_projectDialogueTextFontSizeSpin = new QSpinBox(page0);
+    m_projectDialogueTextFontSizeSpin->setRange(8, 96);
+    m_projectDialogueTextFontSizeSpin->setValue(12);
+    m_projectDialogueTextFontColorEdit = new QLineEdit(page0);
+    m_projectDialogueTextFontColorButton = new QPushButton("取色...", page0);
+    auto *projectDialogueTextColorRow = new QHBoxLayout();
+    projectDialogueTextColorRow->addWidget(m_projectDialogueTextFontColorEdit);
+    projectDialogueTextColorRow->addWidget(m_projectDialogueTextFontColorButton);
+
     projectForm->addRow("开始界面背景", projectBgRow);
     projectForm->addRow("开始界面音乐", projectBgmRow);
+    projectForm->addRow("开始界面字号", m_projectStartFontSizeSpin);
+    projectForm->addRow("开始界面字色", projectStartFontColorRow);
+    projectForm->addRow("姓名字号", m_projectDialogueNameFontSizeSpin);
+    projectForm->addRow("姓名字色", projectDialogueNameColorRow);
+    projectForm->addRow("对白字号", m_projectDialogueTextFontSizeSpin);
+    projectForm->addRow("对白字色", projectDialogueTextColorRow);
     page0Layout->addLayout(projectForm);
     page0Layout->addStretch(1);
     m_stackProperties->addWidget(page0);
@@ -1067,14 +1239,20 @@ void MainWindow::setupPropertyDock()
     bgBgmRow->addWidget(m_bgBgmBrowseButton);
     m_bgStartSpin = new QSpinBox(page2);
     m_bgEndSpin = new QSpinBox(page2);
+    m_bgBgmStartSpin = new QSpinBox(page2);
+    m_bgBgmEndSpin = new QSpinBox(page2);
     m_bgStartSpin->setRange(1, 99999);
     m_bgEndSpin->setRange(1, 99999);
+    m_bgBgmStartSpin->setRange(1, 99999);
+    m_bgBgmEndSpin->setRange(1, 99999);
     m_bgConflictLabel = new QLabel(page2);
     m_bgConflictLabel->setStyleSheet("color:red;");
     form2->addRow("图片路径", bgImageRow);
     form2->addRow("背景音乐", bgBgmRow);
     form2->addRow("起始句", m_bgStartSpin);
     form2->addRow("结束句", m_bgEndSpin);
+    form2->addRow("BGM起始句", m_bgBgmStartSpin);
+    form2->addRow("BGM结束句", m_bgBgmEndSpin);
     form2->addRow("冲突检测", m_bgConflictLabel);
     m_stackProperties->addWidget(page2);
 
@@ -1087,11 +1265,33 @@ void MainWindow::setupPropertyDock()
     auto *dialogueVoiceRow = new QHBoxLayout();
     dialogueVoiceRow->addWidget(m_dialogueVoiceEdit);
     dialogueVoiceRow->addWidget(m_dialogueVoiceBrowseButton);
+    m_dialogueNameFontSizeSpin = new QSpinBox(page3);
+    m_dialogueNameFontSizeSpin->setRange(0, 96);
+    m_dialogueNameFontSizeSpin->setSpecialValueText("跟随全局");
+    m_dialogueNameFontSizeSpin->setKeyboardTracking(false);
+    m_dialogueNameFontColorEdit = new QLineEdit(page3);
+    m_dialogueNameFontColorButton = new QPushButton("取色...", page3);
+    auto *dialogueNameColorRow = new QHBoxLayout();
+    dialogueNameColorRow->addWidget(m_dialogueNameFontColorEdit);
+    dialogueNameColorRow->addWidget(m_dialogueNameFontColorButton);
+    m_dialogueTextFontSizeSpin = new QSpinBox(page3);
+    m_dialogueTextFontSizeSpin->setRange(0, 96);
+    m_dialogueTextFontSizeSpin->setSpecialValueText("跟随全局");
+    m_dialogueTextFontSizeSpin->setKeyboardTracking(false);
+    m_dialogueTextFontColorEdit = new QLineEdit(page3);
+    m_dialogueTextFontColorButton = new QPushButton("取色...", page3);
+    auto *dialogueTextColorRow = new QHBoxLayout();
+    dialogueTextColorRow->addWidget(m_dialogueTextFontColorEdit);
+    dialogueTextColorRow->addWidget(m_dialogueTextFontColorButton);
     m_dialogueEffectCombo = new QComboBox(page3);
     m_dialogueEffectCombo->addItems({"none", "shake", "flash", "fade"});
     form3->addRow("角色", m_dialogueCharacterCombo);
     form3->addRow("文本", m_dialogueTextEdit);
     form3->addRow("语音文件", dialogueVoiceRow);
+    form3->addRow("姓名字号(单句)", m_dialogueNameFontSizeSpin);
+    form3->addRow("姓名字色(单句)", dialogueNameColorRow);
+    form3->addRow("对白字号(单句)", m_dialogueTextFontSizeSpin);
+    form3->addRow("对白字色(单句)", dialogueTextColorRow);
     form3->addRow("特效", m_dialogueEffectCombo);
     m_stackProperties->addWidget(page3);
 
@@ -1112,23 +1312,48 @@ void MainWindow::setupPropertyDock()
     connect(m_bgBgmBrowseButton, &QPushButton::clicked, this, &MainWindow::onBrowseBackgroundBgm);
     connect(m_bgStartSpin, &QSpinBox::valueChanged, this, &MainWindow::onBackgroundPropertiesChanged);
     connect(m_bgEndSpin, &QSpinBox::valueChanged, this, &MainWindow::onBackgroundPropertiesChanged);
+    connect(m_bgBgmStartSpin, &QSpinBox::valueChanged, this, &MainWindow::onBackgroundPropertiesChanged);
+    connect(m_bgBgmEndSpin, &QSpinBox::valueChanged, this, &MainWindow::onBackgroundPropertiesChanged);
     connect(m_bgImageEdit, &QLineEdit::editingFinished, this, [this]() { emit dataChanged(); });
     connect(m_bgBgmEdit, &QLineEdit::editingFinished, this, [this]() { emit dataChanged(); });
     connect(m_bgStartSpin, &QSpinBox::editingFinished, this, [this]() { emit dataChanged(); });
     connect(m_bgEndSpin, &QSpinBox::editingFinished, this, [this]() { emit dataChanged(); });
+    connect(m_bgBgmStartSpin, &QSpinBox::editingFinished, this, [this]() { emit dataChanged(); });
+    connect(m_bgBgmEndSpin, &QSpinBox::editingFinished, this, [this]() { emit dataChanged(); });
 
     connect(m_dialogueCharacterCombo, &QComboBox::currentTextChanged, this, &MainWindow::onDialoguePropertiesChanged);
     connect(m_dialogueTextEdit, &QTextEdit::textChanged, this, &MainWindow::onDialoguePropertiesChanged);
     connect(m_dialogueVoiceEdit, &QLineEdit::textEdited, this, &MainWindow::onDialoguePropertiesChanged);
+    connect(m_dialogueNameFontSizeSpin, &QSpinBox::valueChanged, this, &MainWindow::onDialoguePropertiesChanged);
+    connect(m_dialogueNameFontColorEdit, &QLineEdit::textEdited, this, &MainWindow::onDialoguePropertiesChanged);
+    connect(m_dialogueTextFontSizeSpin, &QSpinBox::valueChanged, this, &MainWindow::onDialoguePropertiesChanged);
+    connect(m_dialogueTextFontColorEdit, &QLineEdit::textEdited, this, &MainWindow::onDialoguePropertiesChanged);
+    connect(m_dialogueNameFontColorButton, &QPushButton::clicked, this, &MainWindow::onPickDialogueLineNameFontColor);
+    connect(m_dialogueTextFontColorButton, &QPushButton::clicked, this, &MainWindow::onPickDialogueLineTextFontColor);
     connect(m_dialogueVoiceBrowseButton, &QPushButton::clicked, this, &MainWindow::onBrowseDialogueVoice);
     connect(m_dialogueEffectCombo, &QComboBox::currentTextChanged, this, &MainWindow::onDialoguePropertiesChanged);
 
     connect(m_projectStartBgEdit, &QLineEdit::textEdited, this, &MainWindow::onProjectPropertiesChanged);
     connect(m_projectStartBgmEdit, &QLineEdit::textEdited, this, &MainWindow::onProjectPropertiesChanged);
+    connect(m_projectStartFontSizeSpin, &QSpinBox::valueChanged, this, &MainWindow::onProjectPropertiesChanged);
+    connect(m_projectStartFontColorEdit, &QLineEdit::textEdited, this, &MainWindow::onProjectPropertiesChanged);
+    connect(m_projectDialogueNameFontSizeSpin, &QSpinBox::valueChanged, this, &MainWindow::onProjectPropertiesChanged);
+    connect(m_projectDialogueNameFontColorEdit, &QLineEdit::textEdited, this, &MainWindow::onProjectPropertiesChanged);
+    connect(m_projectDialogueTextFontSizeSpin, &QSpinBox::valueChanged, this, &MainWindow::onProjectPropertiesChanged);
+    connect(m_projectDialogueTextFontColorEdit, &QLineEdit::textEdited, this, &MainWindow::onProjectPropertiesChanged);
     connect(m_projectStartBgBrowseButton, &QPushButton::clicked, this, &MainWindow::onBrowseStartMenuBackground);
     connect(m_projectStartBgmBrowseButton, &QPushButton::clicked, this, &MainWindow::onBrowseStartMenuBgm);
+    connect(m_projectStartFontColorButton, &QPushButton::clicked, this, &MainWindow::onPickStartMenuFontColor);
+    connect(m_projectDialogueNameFontColorButton, &QPushButton::clicked, this, &MainWindow::onPickDialogueNameFontColor);
+    connect(m_projectDialogueTextFontColorButton, &QPushButton::clicked, this, &MainWindow::onPickDialogueTextFontColor);
     connect(m_projectStartBgEdit, &QLineEdit::editingFinished, this, [this]() { emit dataChanged(); });
     connect(m_projectStartBgmEdit, &QLineEdit::editingFinished, this, [this]() { emit dataChanged(); });
+    connect(m_projectStartFontSizeSpin, &QSpinBox::editingFinished, this, [this]() { emit dataChanged(); });
+    connect(m_projectStartFontColorEdit, &QLineEdit::editingFinished, this, [this]() { emit dataChanged(); });
+    connect(m_projectDialogueNameFontSizeSpin, &QSpinBox::editingFinished, this, [this]() { emit dataChanged(); });
+    connect(m_projectDialogueNameFontColorEdit, &QLineEdit::editingFinished, this, [this]() { emit dataChanged(); });
+    connect(m_projectDialogueTextFontSizeSpin, &QSpinBox::editingFinished, this, [this]() { emit dataChanged(); });
+    connect(m_projectDialogueTextFontColorEdit, &QLineEdit::editingFinished, this, [this]() { emit dataChanged(); });
 }
 
 void MainWindow::setupTimelineDock()
@@ -1224,6 +1449,9 @@ void MainWindow::refreshTree()
     m_backgroundsGroupItem = new QTreeWidgetItem(m_rootItem, {"[背景]"});
     setItemType(m_backgroundsGroupItem, TreeItemType::BackgroundsGroup);
 
+    m_bgmsGroupItem = new QTreeWidgetItem(m_rootItem, {"[背景音乐]"});
+    setItemType(m_bgmsGroupItem, TreeItemType::BgmsGroup);
+
     m_dialoguesGroupItem = new QTreeWidgetItem(m_rootItem, {"[对话]"});
     setItemType(m_dialoguesGroupItem, TreeItemType::DialoguesGroup);
 
@@ -1238,6 +1466,20 @@ void MainWindow::refreshTree()
         auto *item = new QTreeWidgetItem(m_backgroundsGroupItem, {text});
         setItemType(item, TreeItemType::Background);
         item->setData(0, kTreePointerRole, QVariant::fromValue(ptrToValue(background)));
+    }
+
+    for (BgmTrack *track : m_project->bgmTracks()) {
+        const QString bgmName = track->bgmPath().trimmed().isEmpty()
+            ? QString("（未设置）")
+            : QFileInfo(track->bgmPath()).fileName();
+        const QString bgmText = QString("%1 [%2-%3] %4")
+                                    .arg(track->backgroundId())
+                                    .arg(track->startDialogueId())
+                                    .arg(track->endDialogueId())
+                                    .arg(bgmName);
+        auto *bgmItem = new QTreeWidgetItem(m_bgmsGroupItem, {bgmText});
+        setItemType(bgmItem, TreeItemType::BgmTrack);
+        bgmItem->setData(0, kTreePointerRole, QVariant::fromValue(ptrToValue(track)));
     }
 
     for (Dialogue *dialogue : m_project->dialogues()) {
@@ -1268,6 +1510,12 @@ void MainWindow::refreshPropertyPage()
     m_dialogueCharacterCombo->clear();
     m_projectStartBgEdit->setText(m_project->startMenuBackgroundPath());
     m_projectStartBgmEdit->setText(m_project->startMenuBgmPath());
+    m_projectStartFontSizeSpin->setValue(m_project->startMenuFontSize());
+    m_projectStartFontColorEdit->setText(m_project->startMenuFontColor());
+    m_projectDialogueNameFontSizeSpin->setValue(m_project->dialogueNameFontSize());
+    m_projectDialogueNameFontColorEdit->setText(m_project->dialogueNameFontColor());
+    m_projectDialogueTextFontSizeSpin->setValue(m_project->dialogueTextFontSize());
+    m_projectDialogueTextFontColorEdit->setText(m_project->dialogueTextFontColor());
     const QList<Character *> characters = m_project->characters();
     for (Character *character : characters) {
         m_dialogueCharacterCombo->addItem(character->name(), character->id());
@@ -1292,7 +1540,23 @@ void MainWindow::refreshPropertyPage()
         m_bgBgmEdit->setText(background->bgmPath());
         m_bgStartSpin->setValue(background->startDialogueId());
         m_bgEndSpin->setValue(background->endDialogueId());
+        m_bgBgmStartSpin->setValue(background->bgmStartDialogueId());
+        m_bgBgmEndSpin->setValue(background->bgmEndDialogueId());
         refreshBackgroundConflictLabel(background);
+        m_updatingPropertyWidgets = false;
+        return;
+    }
+
+    BgmTrack *bgmTrack = selectedBgmTrack();
+    if (bgmTrack) {
+        m_stackProperties->setCurrentIndex(2);
+        m_bgImageEdit->setText(QString("（BGM轨道）"));
+        m_bgBgmEdit->setText(bgmTrack->bgmPath());
+        m_bgStartSpin->setValue(bgmTrack->startDialogueId());
+        m_bgEndSpin->setValue(bgmTrack->endDialogueId());
+        m_bgBgmStartSpin->setValue(bgmTrack->startDialogueId());
+        m_bgBgmEndSpin->setValue(bgmTrack->endDialogueId());
+        m_bgConflictLabel->setText(QString("轨道所属背景：%1").arg(bgmTrack->backgroundId()));
         m_updatingPropertyWidgets = false;
         return;
     }
@@ -1306,6 +1570,10 @@ void MainWindow::refreshPropertyPage()
         }
         m_dialogueTextEdit->setPlainText(dialogue->text());
         m_dialogueVoiceEdit->setText(dialogue->voiceFile());
+        m_dialogueNameFontSizeSpin->setValue(dialogue->nameFontSizeOverride());
+        m_dialogueNameFontColorEdit->setText(dialogue->nameFontColorOverride());
+        m_dialogueTextFontSizeSpin->setValue(dialogue->textFontSizeOverride());
+        m_dialogueTextFontColorEdit->setText(dialogue->textFontColorOverride());
         m_dialogueEffectCombo->setCurrentText(effectToText(dialogue->specialEffect()));
         m_updatingPropertyWidgets = false;
         return;
@@ -1399,6 +1667,139 @@ void MainWindow::addBackground()
     emit dataChanged();
 }
 
+void MainWindow::addBackgroundMusic()
+{
+    if (!m_project) {
+        return;
+    }
+    const QList<Background *> backgrounds = m_project->backgrounds();
+    if (backgrounds.isEmpty()) {
+        QMessageBox::information(this, "提示", "请先添加至少一个背景。");
+        return;
+    }
+
+    QDialog dialog(this);
+    dialog.setWindowTitle("添加背景音乐");
+    dialog.resize(520, 230);
+
+    auto *backgroundCombo = new QComboBox(&dialog);
+    for (Background *bg : backgrounds) {
+        const QString text = QString("%1 [%2-%3]").arg(bg->id()).arg(bg->startDialogueId()).arg(bg->endDialogueId());
+        backgroundCombo->addItem(text, QVariant::fromValue(ptrToValue(bg)));
+    }
+
+    auto *bgmPathEdit = new QLineEdit(&dialog);
+    auto *browseButton = new QPushButton("浏览...", &dialog);
+    auto *pathRow = new QHBoxLayout();
+    pathRow->addWidget(bgmPathEdit);
+    pathRow->addWidget(browseButton);
+
+    auto *startSpin = new QSpinBox(&dialog);
+    auto *endSpin = new QSpinBox(&dialog);
+    startSpin->setRange(1, 99999);
+    endSpin->setRange(1, 99999);
+    startSpin->setValue(1);
+    endSpin->setValue(1);
+
+    auto syncRangeByBackground = [backgroundCombo, startSpin, endSpin]() {
+        Background *bg = valueToPtr<Background>(backgroundCombo->currentData());
+        if (!bg) {
+            return;
+        }
+        startSpin->setValue(bg->startDialogueId());
+        endSpin->setValue(bg->endDialogueId());
+    };
+    connect(backgroundCombo, &QComboBox::currentIndexChanged, &dialog, syncRangeByBackground);
+    syncRangeByBackground();
+
+    connect(browseButton, &QPushButton::clicked, &dialog, [this, bgmPathEdit]() {
+        const QString sourcePath = QFileDialog::getOpenFileName(this,
+                                                                "选择背景音乐",
+                                                                QString(),
+                                                                "Audio (*.mp3 *.ogg *.wav *.flac *.m4a)");
+        if (!sourcePath.isEmpty()) {
+            bgmPathEdit->setText(sourcePath);
+        }
+    });
+
+    auto *form = new QFormLayout();
+    form->addRow("目标背景", backgroundCombo);
+    form->addRow("音乐文件", pathRow);
+    form->addRow("BGM起始句", startSpin);
+    form->addRow("BGM结束句", endSpin);
+
+    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+
+    auto *layout = new QVBoxLayout(&dialog);
+    layout->addLayout(form);
+    layout->addWidget(buttons);
+
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+
+    Background *bg = valueToPtr<Background>(backgroundCombo->currentData());
+    if (!bg) {
+        return;
+    }
+    const QString sourcePath = bgmPathEdit->text().trimmed();
+    if (sourcePath.isEmpty()) {
+        QMessageBox::warning(this, "失败", "请先选择背景音乐文件。");
+        return;
+    }
+
+    QDir projectDir(QDir::cleanPath(m_projectPath));
+    if (!projectDir.exists() && !projectDir.mkpath(".")) {
+        QMessageBox::warning(this, "失败", "项目目录不可用。");
+        return;
+    }
+    if (!projectDir.mkpath("resources/bgm")) {
+        QMessageBox::warning(this, "失败", "无法创建 resources/bgm 目录。");
+        return;
+    }
+
+    int nextTrackIndex = 1;
+    for (BgmTrack *track : m_project->bgmTracks()) {
+        const QString id = track->id();
+        if (!id.startsWith("bgm")) {
+            continue;
+        }
+        bool ok = false;
+        const int num = id.mid(3).toInt(&ok);
+        if (ok && num >= nextTrackIndex) {
+            nextTrackIndex = num + 1;
+        }
+    }
+    const QString trackId = QString("bgm%1").arg(nextTrackIndex);
+
+    const QFileInfo sourceInfo(sourcePath);
+    const QString ext = sourceInfo.suffix().isEmpty() ? "ogg" : sourceInfo.suffix();
+    const QString fileName = QString("bgm_%1.%2").arg(trackId, ext);
+    const QString relativePath = QDir::cleanPath(QString("resources/bgm/%1").arg(fileName));
+    const QString absoluteTarget = projectDir.filePath(relativePath);
+    QFile::remove(absoluteTarget);
+    if (!QFile::copy(sourcePath, absoluteTarget)) {
+        QMessageBox::warning(this, "失败", "复制背景音乐失败。");
+        return;
+    }
+
+    int bgmStart = startSpin->value();
+    int bgmEnd = endSpin->value();
+    if (bgmStart > bgmEnd) {
+        std::swap(bgmStart, bgmEnd);
+    }
+    auto *track = new BgmTrack(m_project);
+    track->setId(trackId);
+    track->setBackgroundId(bg->id());
+    track->setBgmPath(relativePath);
+    track->setStartDialogueId(bgmStart);
+    track->setEndDialogueId(bgmEnd);
+    m_project->addBgmTrack(track);
+    emit dataChanged();
+}
+
 void MainWindow::addDialogue()
 {
     if (!m_project) {
@@ -1461,6 +1862,22 @@ void MainWindow::deleteBackground(Background *background)
     }
 }
 
+void MainWindow::clearBackgroundBgm(BgmTrack *track)
+{
+    if (!track || !m_project) {
+        return;
+    }
+    const auto ret = QMessageBox::question(this,
+                                           "删除背景音乐",
+                                           QString("确定删除背景音乐轨道“%1”吗？").arg(track->id()));
+    if (ret != QMessageBox::Yes) {
+        return;
+    }
+    if (m_project->removeBgmTrackById(track->id())) {
+        emit dataChanged();
+    }
+}
+
 void MainWindow::deleteDialogue(Dialogue *dialogue)
 {
     if (!dialogue || !m_project) {
@@ -1498,7 +1915,11 @@ Character *MainWindow::selectedCharacter() const
 Background *MainWindow::selectedBackground() const
 {
     QTreeWidgetItem *item = m_treeResources->currentItem();
-    if (!item || itemType(item) != TreeItemType::Background) {
+    if (!item) {
+        return nullptr;
+    }
+    const TreeItemType type = itemType(item);
+    if (type != TreeItemType::Background) {
         return nullptr;
     }
     Background *candidate = valueToPtr<Background>(item->data(0, kTreePointerRole));
@@ -1508,6 +1929,24 @@ Background *MainWindow::selectedBackground() const
     for (Background *background : m_project->backgrounds()) {
         if (background == candidate) {
             return background;
+        }
+    }
+    return nullptr;
+}
+
+BgmTrack *MainWindow::selectedBgmTrack() const
+{
+    QTreeWidgetItem *item = m_treeResources->currentItem();
+    if (!item || itemType(item) != TreeItemType::BgmTrack) {
+        return nullptr;
+    }
+    BgmTrack *candidate = valueToPtr<BgmTrack>(item->data(0, kTreePointerRole));
+    if (!candidate || !m_project) {
+        return nullptr;
+    }
+    for (BgmTrack *track : m_project->bgmTracks()) {
+        if (track == candidate) {
+            return track;
         }
     }
     return nullptr;

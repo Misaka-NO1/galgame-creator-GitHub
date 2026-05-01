@@ -26,6 +26,8 @@ qt_add_executable(galgame_creator
     src/models/dialogue.cpp
     src/models/background.h
     src/models/background.cpp
+    src/models/bgmtrack.h
+    src/models/bgmtrack.cpp
     src/models/project.h
     src/models/project.cpp
     src/models/model_test.cpp

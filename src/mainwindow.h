@@ -27,6 +27,7 @@ class QListView;
 class QAction;
 class QPushButton;
 class DialogueTimelineModel;
+class QToolButton;
 
 class MainWindow : public QMainWindow
 {
@@ -56,11 +57,13 @@ private slots:
     void onOpenProject();
     void onSaveProject();
     void onAddDialogue();
+    void onAddBackgroundMusic();
     void onBatchAddDialogues();
     void onTogglePreviewMode(bool enabled);
     void onExportGame();
     void onTestRun();
     void onShowPropertiesDock();
+    void onOpenProjectStyleEditor();
 
     void onProjectPropertiesChanged();
     void onCharacterPropertiesChanged();
@@ -70,6 +73,11 @@ private slots:
     void onBrowseBackgroundBgm();
     void onBrowseStartMenuBackground();
     void onBrowseStartMenuBgm();
+    void onPickStartMenuFontColor();
+    void onPickDialogueNameFontColor();
+    void onPickDialogueTextFontColor();
+    void onPickDialogueLineNameFontColor();
+    void onPickDialogueLineTextFontColor();
     void onBrowseDialogueVoice();
     void onDeleteSelectedItem();
 
@@ -80,6 +88,8 @@ private:
         Character,
         BackgroundsGroup,
         Background,
+        BgmsGroup,
+        BgmTrack,
         DialoguesGroup,
         Dialogue
     };
@@ -101,13 +111,16 @@ private:
 
     void addCharacter();
     void addBackground();
+    void addBackgroundMusic();
     void addDialogue();
     void deleteCharacter(Character *character);
     void deleteBackground(Background *background);
+    void clearBackgroundBgm(BgmTrack *track);
     void deleteDialogue(Dialogue *dialogue);
 
     Character *selectedCharacter() const;
     Background *selectedBackground() const;
+    BgmTrack *selectedBgmTrack() const;
     Dialogue *selectedDialogue() const;
 
     TreeItemType itemType(const QTreeWidgetItem *item) const;
@@ -127,6 +140,7 @@ private:
     QTreeWidgetItem *m_rootItem = nullptr;
     QTreeWidgetItem *m_charactersGroupItem = nullptr;
     QTreeWidgetItem *m_backgroundsGroupItem = nullptr;
+    QTreeWidgetItem *m_bgmsGroupItem = nullptr;
     QTreeWidgetItem *m_dialoguesGroupItem = nullptr;
 
     GameCanvas *m_canvas = nullptr;
@@ -137,6 +151,15 @@ private:
     QPushButton *m_projectStartBgBrowseButton = nullptr;
     QLineEdit *m_projectStartBgmEdit = nullptr;
     QPushButton *m_projectStartBgmBrowseButton = nullptr;
+    QSpinBox *m_projectStartFontSizeSpin = nullptr;
+    QLineEdit *m_projectStartFontColorEdit = nullptr;
+    QPushButton *m_projectStartFontColorButton = nullptr;
+    QSpinBox *m_projectDialogueNameFontSizeSpin = nullptr;
+    QLineEdit *m_projectDialogueNameFontColorEdit = nullptr;
+    QPushButton *m_projectDialogueNameFontColorButton = nullptr;
+    QSpinBox *m_projectDialogueTextFontSizeSpin = nullptr;
+    QLineEdit *m_projectDialogueTextFontColorEdit = nullptr;
+    QPushButton *m_projectDialogueTextFontColorButton = nullptr;
 
     QLineEdit *m_charNameEdit = nullptr;
     QLineEdit *m_charPortraitEdit = nullptr;
@@ -150,12 +173,20 @@ private:
     QPushButton *m_bgBgmBrowseButton = nullptr;
     QSpinBox *m_bgStartSpin = nullptr;
     QSpinBox *m_bgEndSpin = nullptr;
+    QSpinBox *m_bgBgmStartSpin = nullptr;
+    QSpinBox *m_bgBgmEndSpin = nullptr;
     QLabel *m_bgConflictLabel = nullptr;
 
     QComboBox *m_dialogueCharacterCombo = nullptr;
     QTextEdit *m_dialogueTextEdit = nullptr;
     QLineEdit *m_dialogueVoiceEdit = nullptr;
     QPushButton *m_dialogueVoiceBrowseButton = nullptr;
+    QSpinBox *m_dialogueNameFontSizeSpin = nullptr;
+    QLineEdit *m_dialogueNameFontColorEdit = nullptr;
+    QPushButton *m_dialogueNameFontColorButton = nullptr;
+    QSpinBox *m_dialogueTextFontSizeSpin = nullptr;
+    QLineEdit *m_dialogueTextFontColorEdit = nullptr;
+    QPushButton *m_dialogueTextFontColorButton = nullptr;
     QComboBox *m_dialogueEffectCombo = nullptr;
 
     QListView *m_timelineView = nullptr;

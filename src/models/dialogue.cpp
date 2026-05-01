@@ -89,6 +89,46 @@ void Dialogue::setSpecialEffect(SpecialEffect specialEffect)
     m_specialEffect = specialEffect;
 }
 
+int Dialogue::nameFontSizeOverride() const
+{
+    return m_nameFontSizeOverride;
+}
+
+void Dialogue::setNameFontSizeOverride(int size)
+{
+    m_nameFontSizeOverride = size;
+}
+
+QString Dialogue::nameFontColorOverride() const
+{
+    return m_nameFontColorOverride;
+}
+
+void Dialogue::setNameFontColorOverride(const QString &color)
+{
+    m_nameFontColorOverride = color.trimmed();
+}
+
+int Dialogue::textFontSizeOverride() const
+{
+    return m_textFontSizeOverride;
+}
+
+void Dialogue::setTextFontSizeOverride(int size)
+{
+    m_textFontSizeOverride = size;
+}
+
+QString Dialogue::textFontColorOverride() const
+{
+    return m_textFontColorOverride;
+}
+
+void Dialogue::setTextFontColorOverride(const QString &color)
+{
+    m_textFontColorOverride = color.trimmed();
+}
+
 QJsonObject Dialogue::toJson() const
 {
     QJsonObject json;
@@ -97,6 +137,10 @@ QJsonObject Dialogue::toJson() const
     json["text"] = m_text;
     json["voiceFile"] = m_voiceFile;
     json["specialEffect"] = specialEffectToString(m_specialEffect);
+    json["nameFontSizeOverride"] = m_nameFontSizeOverride;
+    json["nameFontColorOverride"] = m_nameFontColorOverride;
+    json["textFontSizeOverride"] = m_textFontSizeOverride;
+    json["textFontColorOverride"] = m_textFontColorOverride;
     return json;
 }
 
@@ -115,5 +159,9 @@ Dialogue *Dialogue::fromJson(const QJsonObject &json, QObject *parent)
     dialogue->setText(json.value("text").toString());
     dialogue->setVoiceFile(json.value("voiceFile").toString());
     dialogue->setSpecialEffect(specialEffectFromString(json.value("specialEffect").toString()));
+    dialogue->setNameFontSizeOverride(json.value("nameFontSizeOverride").toInt(0));
+    dialogue->setNameFontColorOverride(json.value("nameFontColorOverride").toString());
+    dialogue->setTextFontSizeOverride(json.value("textFontSizeOverride").toInt(0));
+    dialogue->setTextFontColorOverride(json.value("textFontColorOverride").toString());
     return dialogue;
 }

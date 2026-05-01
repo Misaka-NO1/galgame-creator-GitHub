@@ -13,6 +13,8 @@ class Background : public QObject
     Q_PROPERTY(int startDialogueId READ startDialogueId WRITE setStartDialogueId)
     Q_PROPERTY(int endDialogueId READ endDialogueId WRITE setEndDialogueId)
     Q_PROPERTY(QString bgmPath READ bgmPath WRITE setBgmPath)
+    Q_PROPERTY(int bgmStartDialogueId READ bgmStartDialogueId WRITE setBgmStartDialogueId)
+    Q_PROPERTY(int bgmEndDialogueId READ bgmEndDialogueId WRITE setBgmEndDialogueId)
 
 public:
     explicit Background(QObject *parent = nullptr);
@@ -42,12 +44,24 @@ public:
     // 设置背景音乐路径。
     void setBgmPath(const QString &bgmPath);
 
+    // 获取背景音乐起始对话 ID。
+    int bgmStartDialogueId() const;
+    // 设置背景音乐起始对话 ID。
+    void setBgmStartDialogueId(int id);
+
+    // 获取背景音乐结束对话 ID。
+    int bgmEndDialogueId() const;
+    // 设置背景音乐结束对话 ID。
+    void setBgmEndDialogueId(int id);
+
     // 序列化背景段信息到 JSON 对象。
     QJsonObject toJson() const;
     // 从 JSON 反序列化背景对象，并绑定可选父对象。
     static Background *fromJson(const QJsonObject &json, QObject *parent = nullptr);
     // 判断指定对话 ID 是否落在该背景覆盖区间。
     bool coversDialogue(int dialogueId) const;
+    // 判断指定对话 ID 是否落在该背景音乐覆盖区间。
+    bool coversBgmDialogue(int dialogueId) const;
     // 判断两个背景区间是否存在重叠冲突。
     bool conflictsWith(const Background &other) const;
 
@@ -57,6 +71,8 @@ private:
     int m_startDialogueId = 1;
     int m_endDialogueId = 1;
     QString m_bgmPath;
+    int m_bgmStartDialogueId = 1;
+    int m_bgmEndDialogueId = 1;
 };
 
 #endif // BACKGROUND_H

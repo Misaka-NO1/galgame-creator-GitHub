@@ -625,6 +625,7 @@ bool Exporter::copyResources(const Project &project,
 
     const QList<Character *> characters = project.characters();
     const QList<Background *> backgrounds = project.backgrounds();
+    const QList<BgmTrack *> bgmTracks = project.bgmTracks();
     const QList<Dialogue *> dialogues = project.dialogues();
 
     int total = characters.size() + backgrounds.size() + dialogues.size();
@@ -670,22 +671,28 @@ bool Exporter::copyResources(const Project &project,
             progressBar->setValue(10 + (done * 70 / total));
         }
 
-        const QString bgm = background->bgmPath().trimmed();
-        if (!bgm.isEmpty()) {
-            const QString bgmSrc = resolveProjectPath(projectDir, bgm);
-            if (QFileInfo::exists(bgmSrc)) {
-                const QString bgmRel = QDir::cleanPath(QString("assets/bgm/%1_%2")
-                                                           .arg(background->id(), QFileInfo(bgmSrc).fileName()));
-                const QString bgmDst = root.filePath(bgmRel);
-                if (!copyFileSafe(bgmSrc, bgmDst)) {
-                    if (errorMsg) {
-                        *errorMsg = QString("复制背景音乐资源失败：%1").arg(bgmSrc);
-                    }
-                    return false;
-                }
-                bgmAssets.insert(background->id(), bgmRel);
-            }
+    }
+
+    for (BgmTrack *track : bgmTracks) {
+        const QString bgm = track->bgmPath().trimmed();
+        if (bgm.isEmpty()) {
+            continue;
         }
+        const QString bgmSrc = resolveProjectPath(projectDir, bgm);
+        if (!QFileInfo::exists(bgmSrc)) {
+            continue;
+        }
+        const QString key = track->id().trimmed().isEmpty() ? QString("%1_%2_%3").arg(track->backgroundId()).arg(track->startDialogueId()).arg(track->endDialogueId()) : track->id();
+        const QString bgmRel = QDir::cleanPath(QString("assets/bgm/%1_%2")
+                                                   .arg(key, QFileInfo(bgmSrc).fileName()));
+        const QString bgmDst = root.filePath(bgmRel);
+        if (!copyFileSafe(bgmSrc, bgmDst)) {
+            if (errorMsg) {
+                *errorMsg = QString("复制背景音乐资源失败：%1").arg(bgmSrc);
+            }
+            return false;
+        }
+        bgmAssets.insert(key, bgmRel);
     }
 
     for (Dialogue *dialogue : dialogues) {
@@ -765,27 +772,37 @@ bool Exporter::generateGameJson(const Project &project,
                                 QString *errorMsg)
 {
     QJsonArray scriptArray;
+    QJsonObject characterNameMap;
     const QJsonObject backgroundAssets = assetsObject.value("backgrounds").toObject();
     const QJsonObject voiceAssets = assetsObject.value("voices").toObject();
     const QJsonObject bgmAssets = assetsObject.value("bgm").toObject();
 
     for (Dialogue *dialogue : project.dialogues()) {
         const Background *bg = project.getBackgroundForDialogue(dialogue->id());
+        const BgmTrack *bgmTrack = bg ? project.getBgmTrackForDialogue(dialogue->id(), bg->id()) : nullptr;
+        const Character *character = project.getCharacter(dialogue->characterId());
 
         QJsonObject scriptLine;
         scriptLine["type"] = "dialogue";
         scriptLine["id"] = dialogue->id();
         scriptLine["char"] = dialogue->characterId();
+        scriptLine["charName"] = character ? character->name() : dialogue->characterId();
         scriptLine["text"] = dialogue->text();
         scriptLine["bg"] = bg ? bg->id() : QString();
         scriptLine["bgPath"] = bg ? backgroundAssets.value(bg->id()).toString() : QString();
-        scriptLine["bgmPath"] = bg ? bgmAssets.value(bg->id()).toString() : QString();
+        scriptLine["bgmPath"] = bgmTrack ? bgmAssets.value(bgmTrack->id()).toString() : QString();
         scriptLine["voice"] = dialogue->voiceFile();
         scriptLine["voicePath"] = voiceAssets.value(dialogue->voiceFile()).toString();
         scriptLine["effect"] = dialogue->toJson().value("specialEffect").toString("none");
-        const Character *character = project.getCharacter(dialogue->characterId());
         scriptLine["portraitScale"] = character ? character->portraitScale() : 100;
+        scriptLine["nameFontSizeOverride"] = dialogue->nameFontSizeOverride();
+        scriptLine["nameFontColorOverride"] = dialogue->nameFontColorOverride();
+        scriptLine["textFontSizeOverride"] = dialogue->textFontSizeOverride();
+        scriptLine["textFontColorOverride"] = dialogue->textFontColorOverride();
         scriptArray.append(scriptLine);
+        if (character) {
+            characterNameMap.insert(character->id(), character->name());
+        }
     }
 
     QJsonObject root;
@@ -794,7 +811,21 @@ bool Exporter::generateGameJson(const Project &project,
     root["height"] = opts.windowSize.height();
     root["assets"] = assetsObject;
     root["script"] = scriptArray;
+    root["characterNames"] = characterNameMap;
     root["startMenu"] = assetsObject.value("startMenu").toObject();
+    QJsonObject uiStyle;
+    QJsonObject startStyle;
+    startStyle["fontSize"] = project.startMenuFontSize();
+    startStyle["fontColor"] = project.startMenuFontColor();
+    uiStyle["startMenu"] = startStyle;
+
+    QJsonObject dialogueStyle;
+    dialogueStyle["nameFontSize"] = project.dialogueNameFontSize();
+    dialogueStyle["nameFontColor"] = project.dialogueNameFontColor();
+    dialogueStyle["textFontSize"] = project.dialogueTextFontSize();
+    dialogueStyle["textFontColor"] = project.dialogueTextFontColor();
+    uiStyle["dialogue"] = dialogueStyle;
+    root["uiStyle"] = uiStyle;
 
     QFile out(path);
     if (!out.open(QIODevice::WriteOnly | QIODevice::Truncate)) {

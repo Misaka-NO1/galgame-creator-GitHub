@@ -11,9 +11,11 @@ class QGraphicsPixmapItem;
 class QGraphicsRectItem;
 class QGraphicsTextItem;
 class QTemporaryDir;
+class QLabel;
 class QPushButton;
 class QMediaPlayer;
 class QAudioOutput;
+class QTimer;
 class QKeyEvent;
 class QResizeEvent;
 class QEvent;
@@ -58,6 +60,10 @@ private:
         QString bgmPath;
         QString voicePath;
         int portraitScale = 100;
+        int nameFontSizeOverride = 0;
+        QString nameFontColorOverride;
+        int textFontSizeOverride = 0;
+        QString textFontColorOverride;
     };
 
     bool loadFromDirectory(const QString &dirPath, QString *errorMsg);
@@ -72,12 +78,14 @@ private:
     void showSettingsDialog(bool *requestBackToStart = nullptr);
     void enterStartScreenState();
     void updateSaveButtonGeometry();
+    void applyDialogueTextStyle();
     void playLineAudio(const RuntimeLine &line);
     void renderCurrentLine();
     void updateViewTransform();
     void toggleFullScreenMode();
     void saveQuickSlot();
     void loadQuickSlot();
+    void tryScheduleAutoAdvance();
     QString resolveAssetPath(const QString &assetRelPath) const;
 
     QGraphicsView *m_view = nullptr;
@@ -88,10 +96,13 @@ private:
     QGraphicsTextItem *m_nameItem = nullptr;
     QGraphicsTextItem *m_textItem = nullptr;
     QPushButton *m_saveButton = nullptr;
+    QLabel *m_autoPlayIndicator = nullptr;
     QMediaPlayer *m_voicePlayer = nullptr;
     QAudioOutput *m_voiceOutput = nullptr;
     QMediaPlayer *m_bgmPlayer = nullptr;
     QAudioOutput *m_bgmOutput = nullptr;
+    QTimer *m_autoAdvanceTimer = nullptr;
+    bool m_autoPlayEnabled = false;
     QString m_currentBgmPath;
 
     TypewriterEffect m_typewriter;
@@ -107,6 +118,12 @@ private:
     int m_currentIndex = 0;
     QString m_startMenuBackgroundPath;
     QString m_startMenuBgmPath;
+    int m_startMenuFontSize = 22;
+    QString m_startMenuFontColor = "#FFFFFF";
+    int m_dialogueNameFontSize = 14;
+    QString m_dialogueNameFontColor = "#FFFFFF";
+    int m_dialogueTextFontSize = 12;
+    QString m_dialogueTextFontColor = "#FFFFFF";
     bool m_startMenuPending = false;
     bool m_startMenuShown = false;
 };

@@ -13,6 +13,10 @@ class Dialogue : public QObject
     Q_PROPERTY(QString text READ text WRITE setText)
     Q_PROPERTY(QString voiceFile READ voiceFile WRITE setVoiceFile)
     Q_PROPERTY(SpecialEffect specialEffect READ specialEffect WRITE setSpecialEffect)
+    Q_PROPERTY(int nameFontSizeOverride READ nameFontSizeOverride WRITE setNameFontSizeOverride)
+    Q_PROPERTY(QString nameFontColorOverride READ nameFontColorOverride WRITE setNameFontColorOverride)
+    Q_PROPERTY(int textFontSizeOverride READ textFontSizeOverride WRITE setTextFontSizeOverride)
+    Q_PROPERTY(QString textFontColorOverride READ textFontColorOverride WRITE setTextFontColorOverride)
 
 public:
     enum class SpecialEffect {
@@ -50,6 +54,24 @@ public:
     // 设置特效枚举值。
     void setSpecialEffect(SpecialEffect specialEffect);
 
+    // 获取该句姓名字号覆盖值（<=0 表示使用全局）。
+    int nameFontSizeOverride() const;
+    // 设置该句姓名字号覆盖值（<=0 表示使用全局）。
+    void setNameFontSizeOverride(int size);
+    // 获取该句姓名颜色覆盖值（空表示使用全局）。
+    QString nameFontColorOverride() const;
+    // 设置该句姓名颜色覆盖值（空表示使用全局）。
+    void setNameFontColorOverride(const QString &color);
+
+    // 获取该句对白字号覆盖值（<=0 表示使用全局）。
+    int textFontSizeOverride() const;
+    // 设置该句对白字号覆盖值（<=0 表示使用全局）。
+    void setTextFontSizeOverride(int size);
+    // 获取该句对白颜色覆盖值（空表示使用全局）。
+    QString textFontColorOverride() const;
+    // 设置该句对白颜色覆盖值（空表示使用全局）。
+    void setTextFontColorOverride(const QString &color);
+
     // 序列化单句对话到 JSON 对象。
     QJsonObject toJson() const;
     // 从 JSON 反序列化对话对象，并绑定可选父对象。
@@ -61,6 +83,10 @@ private:
     QString m_text;
     QString m_voiceFile;
     SpecialEffect m_specialEffect = SpecialEffect::None;
+    int m_nameFontSizeOverride = 0;
+    QString m_nameFontColorOverride;
+    int m_textFontSizeOverride = 0;
+    QString m_textFontColorOverride;
 };
 
 #endif // DIALOGUE_H

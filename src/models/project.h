@@ -2,6 +2,7 @@
 #define PROJECT_H
 
 #include "background.h"
+#include "bgmtrack.h"
 #include "character.h"
 #include "dialogue.h"
 
@@ -18,9 +19,16 @@ class Project : public QObject
     Q_PROPERTY(QFont defaultFont READ defaultFont WRITE setDefaultFont)
     Q_PROPERTY(QString startMenuBackgroundPath READ startMenuBackgroundPath WRITE setStartMenuBackgroundPath)
     Q_PROPERTY(QString startMenuBgmPath READ startMenuBgmPath WRITE setStartMenuBgmPath)
+    Q_PROPERTY(int startMenuFontSize READ startMenuFontSize WRITE setStartMenuFontSize)
+    Q_PROPERTY(QString startMenuFontColor READ startMenuFontColor WRITE setStartMenuFontColor)
+    Q_PROPERTY(int dialogueNameFontSize READ dialogueNameFontSize WRITE setDialogueNameFontSize)
+    Q_PROPERTY(QString dialogueNameFontColor READ dialogueNameFontColor WRITE setDialogueNameFontColor)
+    Q_PROPERTY(int dialogueTextFontSize READ dialogueTextFontSize WRITE setDialogueTextFontSize)
+    Q_PROPERTY(QString dialogueTextFontColor READ dialogueTextFontColor WRITE setDialogueTextFontColor)
     Q_PROPERTY(QList<QObject *> characters READ characterObjects)
     Q_PROPERTY(QList<QObject *> dialogues READ dialogueObjects)
     Q_PROPERTY(QList<QObject *> backgrounds READ backgroundObjects)
+    Q_PROPERTY(QList<QObject *> bgmTracks READ bgmTrackObjects)
 
 public:
     explicit Project(QObject *parent = nullptr);
@@ -51,17 +59,47 @@ public:
     // 设置开始界面背景音乐路径。
     void setStartMenuBgmPath(const QString &path);
 
+    // 获取开始界面按钮字体大小。
+    int startMenuFontSize() const;
+    // 设置开始界面按钮字体大小。
+    void setStartMenuFontSize(int size);
+    // 获取开始界面按钮字体颜色。
+    QString startMenuFontColor() const;
+    // 设置开始界面按钮字体颜色。
+    void setStartMenuFontColor(const QString &color);
+
+    // 获取对话姓名字体大小。
+    int dialogueNameFontSize() const;
+    // 设置对话姓名字体大小。
+    void setDialogueNameFontSize(int size);
+    // 获取对话姓名字体颜色。
+    QString dialogueNameFontColor() const;
+    // 设置对话姓名字体颜色。
+    void setDialogueNameFontColor(const QString &color);
+
+    // 获取对话文本字体大小。
+    int dialogueTextFontSize() const;
+    // 设置对话文本字体大小。
+    void setDialogueTextFontSize(int size);
+    // 获取对话文本字体颜色。
+    QString dialogueTextFontColor() const;
+    // 设置对话文本字体颜色。
+    void setDialogueTextFontColor(const QString &color);
+
     // 获取角色对象列表（强类型）。
     QList<Character *> characters() const;
     // 获取对话对象列表（强类型）。
     QList<Dialogue *> dialogues() const;
     // 获取背景对象列表（强类型）。
     QList<Background *> backgrounds() const;
+    // 获取背景音乐轨道列表（强类型）。
+    QList<BgmTrack *> bgmTracks() const;
 
     // 为 Q_PROPERTY 暴露 QObject 列表，便于后续接入 QML。
     QList<QObject *> characterObjects() const;
     QList<QObject *> dialogueObjects() const;
     QList<QObject *> backgroundObjects() const;
+    QList<QObject *> bgmTrackObjects() const;
 
     // 添加并托管角色对象所有权。
     void addCharacter(Character *character);
@@ -71,6 +109,8 @@ public:
     void insertDialogueAt(Dialogue *dialogue, int index);
     // 添加并托管背景对象所有权。
     void addBackground(Background *background);
+    // 添加并托管背景音乐轨道对象所有权。
+    void addBgmTrack(BgmTrack *track);
     // 清空当前项目中的所有角色、对话和背景对象。
     void clear();
 
@@ -97,6 +137,12 @@ public:
     bool removeDialogueById(int id);
     // 根据对话 ID 获取应显示的背景对象。
     const Background *getBackgroundForDialogue(int id) const;
+    // 根据对话 ID 获取应播放的背景音乐来源背景对象。
+    const Background *getBgmBackgroundForDialogue(int id) const;
+    // 根据对话 ID 和背景 ID 获取应播放的背景音乐轨道。
+    const BgmTrack *getBgmTrackForDialogue(int id, const QString &backgroundId) const;
+    // 删除指定背景音乐轨道。
+    bool removeBgmTrackById(const QString &id);
     // 根据角色 ID 查找角色对象（只读）。
     const Character *getCharacter(const QString &id) const;
     // 根据角色 ID 查找角色对象（可写）。
@@ -108,9 +154,16 @@ private:
     QFont m_defaultFont;
     QString m_startMenuBackgroundPath;
     QString m_startMenuBgmPath;
+    int m_startMenuFontSize = 22;
+    QString m_startMenuFontColor = "#FFFFFF";
+    int m_dialogueNameFontSize = 14;
+    QString m_dialogueNameFontColor = "#FFFFFF";
+    int m_dialogueTextFontSize = 12;
+    QString m_dialogueTextFontColor = "#FFFFFF";
     QList<Character *> m_characters;
     QList<Dialogue *> m_dialogues;
     QList<Background *> m_backgrounds;
+    QList<BgmTrack *> m_bgmTracks;
 };
 
 #endif // PROJECT_H

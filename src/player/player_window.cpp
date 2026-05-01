@@ -9,6 +9,7 @@
 #include <QGraphicsTextItem>
 #include <QGraphicsView>
 #include <QAudioOutput>
+#include <QColor>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -25,6 +26,8 @@
 #include <QPushButton>
 #include <QResizeEvent>
 #include <QSlider>
+#include <QStackedWidget>
+#include <QShortcut>
 #include <QPainter>
 #include <QProcess>
 #include <QSettings>
@@ -37,6 +40,16 @@ namespace {
 
 constexpr int kMaxSaveSlots = 3;
 constexpr const char *kBgmVolumeKey = "audio/bgmVolume";
+constexpr const char *kVoiceVolumeKey = "audio/voiceVolume";
+
+QString normalizeColor(const QString &raw, const QString &fallback)
+{
+    const QColor color(raw.trimmed());
+    if (!color.isValid()) {
+        return fallback;
+    }
+    return color.name(QColor::HexRgb).toUpper();
+}
 
 QPixmap makeNotFound(int w, int h)
 {
@@ -113,17 +126,43 @@ PlayerWindow::PlayerWindow(QWidget *parent)
     connect(&m_typewriter, &TypewriterEffect::textUpdated, this, &PlayerWindow::onTextUpdated);
     connect(&m_typewriter, &TypewriterEffect::finished, this, &PlayerWindow::onTextFinished);
 
-    m_saveButton = new QPushButton("设置", this);
-    m_saveButton->setFixedHeight(34);
+    m_saveButton = new QPushButton(QString::fromUtf8("\xE2\x9A\x99"), this);
+    m_saveButton->setFixedSize(40, 40);
     m_saveButton->setCursor(Qt::PointingHandCursor);
-    m_saveButton->setStyleSheet("QPushButton { background: rgba(0,0,0,150); color: white; border: 1px solid #777; border-radius: 6px; padding: 0 12px; }");
+    m_saveButton->setStyleSheet(
+        "QPushButton {"
+        "background: rgba(0,0,0,150);"
+        "color: white;"
+        "border: 1px solid #777;"
+        "border-radius: 20px;"
+        "font-size: 20px;"
+        "font-weight: 700;"
+        "padding: 0;"
+        "}");
     connect(m_saveButton, &QPushButton::clicked, this, &PlayerWindow::onSettingsButtonClicked);
+
+    m_autoPlayIndicator = new QLabel(">", this);
+    m_autoPlayIndicator->setAlignment(Qt::AlignCenter);
+    m_autoPlayIndicator->setFixedSize(34, 34);
+    m_autoPlayIndicator->setStyleSheet(
+        "QLabel {"
+        "background: rgba(0, 0, 0, 165);"
+        "color: #7CFC00;"
+        "border: 1px solid rgba(255,255,255,130);"
+        "border-radius: 17px;"
+        "font-size: 20px;"
+        "font-weight: 800;"
+        "}");
+    m_autoPlayIndicator->setVisible(false);
+
     updateSaveButtonGeometry();
     m_saveButton->raise();
+    m_autoPlayIndicator->raise();
 
     m_voicePlayer = new QMediaPlayer(this);
     m_voiceOutput = new QAudioOutput(this);
-    m_voiceOutput->setVolume(1.0);
+    const double savedVoiceVolume = QSettings().value(kVoiceVolumeKey, 1.0).toDouble();
+    m_voiceOutput->setVolume(qBound(0.0, savedVoiceVolume, 1.0));
     m_voicePlayer->setAudioOutput(m_voiceOutput);
 
     m_bgmPlayer = new QMediaPlayer(this);
@@ -133,6 +172,13 @@ PlayerWindow::PlayerWindow(QWidget *parent)
     m_bgmOutput->setVolume(qBound(0.0, savedBgmVolume, 1.0));
     m_bgmPlayer->setAudioOutput(m_bgmOutput);
     m_bgmPlayer->setLoops(QMediaPlayer::Infinite);
+
+    m_autoAdvanceTimer = new QTimer(this);
+    m_autoAdvanceTimer->setSingleShot(true);
+    connect(m_autoAdvanceTimer, &QTimer::timeout, this, [this]() {
+        onAdvanceRequested();
+    });
+    applyDialogueTextStyle();
 }
 
 PlayerWindow::~PlayerWindow()
@@ -165,8 +211,32 @@ void PlayerWindow::keyPressEvent(QKeyEvent *event)
         return;
     }
 
+    if ((event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter)
+        && (event->modifiers() & Qt::AltModifier)) {
+        toggleFullScreenMode();
+        event->accept();
+        return;
+    }
     if (event->key() == Qt::Key_Space || event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) {
         onAdvanceRequested();
+        event->accept();
+        return;
+    }
+    if (event->key() == Qt::Key_A) {
+        m_autoPlayEnabled = !m_autoPlayEnabled;
+        if (m_autoPlayIndicator) {
+            m_autoPlayIndicator->setVisible(m_autoPlayEnabled);
+        }
+        if (!m_autoPlayEnabled && m_autoAdvanceTimer) {
+            m_autoAdvanceTimer->stop();
+        } else {
+            tryScheduleAutoAdvance();
+        }
+        event->accept();
+        return;
+    }
+    if (event->key() == Qt::Key_S) {
+        onSettingsButtonClicked();
         event->accept();
         return;
     }
@@ -177,11 +247,6 @@ void PlayerWindow::keyPressEvent(QKeyEvent *event)
     }
     if (event->key() == Qt::Key_F9) {
         loadQuickSlot();
-        event->accept();
-        return;
-    }
-    if (event->key() == Qt::Key_Return && (event->modifiers() & Qt::AltModifier)) {
-        toggleFullScreenMode();
         event->accept();
         return;
     }
@@ -243,6 +308,7 @@ void PlayerWindow::onTextUpdated(const QString &text)
 
 void PlayerWindow::onTextFinished()
 {
+    tryScheduleAutoAdvance();
 }
 
 void PlayerWindow::onSettingsButtonClicked()
@@ -268,6 +334,8 @@ void PlayerWindow::showSettingsDialog(bool *requestBackToStart)
     dialog.resize(380, 280);
 
     auto *layout = new QVBoxLayout(&dialog);
+    auto *toggleShortcut = new QShortcut(QKeySequence(Qt::Key_S), &dialog);
+    connect(toggleShortcut, &QShortcut::activated, &dialog, &QDialog::reject);
 
     auto *bgmLabel = new QLabel("背景音乐音量", &dialog);
     layout->addWidget(bgmLabel);
@@ -288,6 +356,24 @@ void PlayerWindow::showSettingsDialog(bool *requestBackToStart)
         }
         QSettings().setValue(kBgmVolumeKey, value / 100.0);
         valueLabel->setText(QString("%1%").arg(value));
+    });
+
+    auto *voiceLabel = new QLabel("角色语音音量", &dialog);
+    layout->addWidget(voiceLabel);
+    auto *voiceSlider = new QSlider(Qt::Horizontal, &dialog);
+    voiceSlider->setRange(0, 100);
+    const int currentVoiceVolume = m_voiceOutput ? qRound(m_voiceOutput->volume() * 100.0) : 100;
+    voiceSlider->setValue(currentVoiceVolume);
+    layout->addWidget(voiceSlider);
+    auto *voiceValueLabel = new QLabel(QString("%1%").arg(currentVoiceVolume), &dialog);
+    voiceValueLabel->setAlignment(Qt::AlignRight);
+    layout->addWidget(voiceValueLabel);
+    connect(voiceSlider, &QSlider::valueChanged, &dialog, [this, voiceValueLabel](int value) {
+        if (m_voiceOutput) {
+            m_voiceOutput->setVolume(value / 100.0);
+        }
+        QSettings().setValue(kVoiceVolumeKey, value / 100.0);
+        voiceValueLabel->setText(QString("%1%").arg(value));
     });
 
     auto *saveProgressBtn = new QPushButton("保存游戏进度", &dialog);
@@ -409,6 +495,14 @@ bool PlayerWindow::loadFromDirectory(const QString &dirPath, QString *errorMsg)
         m_charDisplayNames.insert(it.key(), it.key());
         m_charPortraitPaths.insert(it.key(), it.value().toString());
     }
+    const QJsonObject charNames = root.value("characterNames").toObject();
+    for (auto it = charNames.begin(); it != charNames.end(); ++it) {
+        const QString id = it.key();
+        const QString name = it.value().toString().trimmed();
+        if (!id.isEmpty() && !name.isEmpty()) {
+            m_charDisplayNames.insert(id, name);
+        }
+    }
 
     m_script.clear();
     const QJsonArray script = root.value("script").toArray();
@@ -417,17 +511,36 @@ bool PlayerWindow::loadFromDirectory(const QString &dirPath, QString *errorMsg)
         RuntimeLine line;
         line.id = obj.value("id").toInt();
         line.characterId = obj.value("char").toString();
+        const QString inlineName = obj.value("charName").toString().trimmed();
+        if (!line.characterId.isEmpty() && !inlineName.isEmpty()) {
+            m_charDisplayNames.insert(line.characterId, inlineName);
+        }
         line.text = obj.value("text").toString();
         line.backgroundPath = obj.value("bgPath").toString();
         line.bgmPath = obj.value("bgmPath").toString();
         line.voicePath = obj.value("voicePath").toString();
         line.portraitScale = obj.value("portraitScale").toInt(100);
+        line.nameFontSizeOverride = obj.value("nameFontSizeOverride").toInt(0);
+        line.nameFontColorOverride = obj.value("nameFontColorOverride").toString();
+        line.textFontSizeOverride = obj.value("textFontSizeOverride").toInt(0);
+        line.textFontColorOverride = obj.value("textFontColorOverride").toString();
         m_script.append(line);
     }
 
     const QJsonObject startMenu = root.value("startMenu").toObject();
     m_startMenuBackgroundPath = startMenu.value("bgPath").toString();
     m_startMenuBgmPath = startMenu.value("bgmPath").toString();
+
+    const QJsonObject uiStyle = root.value("uiStyle").toObject();
+    const QJsonObject startStyle = uiStyle.value("startMenu").toObject();
+    const QJsonObject dialogueStyle = uiStyle.value("dialogue").toObject();
+    m_startMenuFontSize = qBound(8, startStyle.value("fontSize").toInt(22), 96);
+    m_startMenuFontColor = normalizeColor(startStyle.value("fontColor").toString("#FFFFFF"), "#FFFFFF");
+    m_dialogueNameFontSize = qBound(8, dialogueStyle.value("nameFontSize").toInt(14), 96);
+    m_dialogueNameFontColor = normalizeColor(dialogueStyle.value("nameFontColor").toString("#FFFFFF"), "#FFFFFF");
+    m_dialogueTextFontSize = qBound(8, dialogueStyle.value("textFontSize").toInt(12), 96);
+    m_dialogueTextFontColor = normalizeColor(dialogueStyle.value("textFontColor").toString("#FFFFFF"), "#FFFFFF");
+    applyDialogueTextStyle();
 
     if (m_script.isEmpty()) {
         if (errorMsg) {
@@ -488,11 +601,35 @@ void PlayerWindow::renderCurrentLine()
     if (m_currentIndex < 0 || m_currentIndex >= m_script.size()) {
         return;
     }
+    if (m_autoAdvanceTimer) {
+        m_autoAdvanceTimer->stop();
+    }
 
     m_typewriter.cancel();
     m_textItem->setPlainText(QString());
 
     const RuntimeLine &line = m_script.at(m_currentIndex);
+    const int nameSize = line.nameFontSizeOverride > 0 ? line.nameFontSizeOverride : m_dialogueNameFontSize;
+    const int textSize = line.textFontSizeOverride > 0 ? line.textFontSizeOverride : m_dialogueTextFontSize;
+    const QString nameColor = line.nameFontColorOverride.trimmed().isEmpty()
+        ? m_dialogueNameFontColor
+        : normalizeColor(line.nameFontColorOverride, m_dialogueNameFontColor);
+    const QString textColor = line.textFontColorOverride.trimmed().isEmpty()
+        ? m_dialogueTextFontColor
+        : normalizeColor(line.textFontColorOverride, m_dialogueTextFontColor);
+    if (m_nameItem) {
+        QFont font = m_nameItem->font();
+        font.setPointSize(nameSize);
+        font.setBold(true);
+        m_nameItem->setFont(font);
+        m_nameItem->setDefaultTextColor(QColor(nameColor));
+    }
+    if (m_textItem) {
+        QFont font = m_textItem->font();
+        font.setPointSize(textSize);
+        m_textItem->setFont(font);
+        m_textItem->setDefaultTextColor(QColor(textColor));
+    }
     m_nameItem->setPlainText(m_charDisplayNames.value(line.characterId, line.characterId));
 
     QPixmap bg(resolveAssetPath(line.backgroundPath));
@@ -554,6 +691,10 @@ void PlayerWindow::playLineAudio(const RuntimeLine &line)
 
 bool PlayerWindow::showStartMenu(QString *errorMsg)
 {
+    if (m_saveButton) {
+        m_saveButton->setVisible(false);
+    }
+
     enterStartScreenState();
     const QString startBgAbs = resolveAssetPath(m_startMenuBackgroundPath);
     if (!startBgAbs.isEmpty()) {
@@ -575,67 +716,82 @@ bool PlayerWindow::showStartMenu(QString *errorMsg)
     QDialog dialog(this);
     dialog.setWindowTitle(m_title.isEmpty() ? QString("开始游戏") : m_title);
     dialog.setModal(true);
-    dialog.resize(520, 320);
+    dialog.setGeometry(this->rect());
     dialog.setWindowFlag(Qt::FramelessWindowHint, true);
     dialog.setAttribute(Qt::WA_TranslucentBackground, true);
-
-    auto *layout = new QVBoxLayout(&dialog);
-    layout->setContentsMargins(16, 16, 16, 16);
-
-    auto *panel = new QWidget(&dialog);
-    panel->setObjectName("startMenuPanel");
-    panel->setStyleSheet(
-        "#startMenuPanel {"
-        "background: rgba(0, 0, 0, 145);"
-        "border: 1px solid rgba(255, 255, 255, 80);"
-        "border-radius: 10px;"
-        "}"
-        "QLabel { color: white; }"
+    dialog.setStyleSheet(
+        QString("QLabel { color: %1; }"
         "QPushButton {"
         "background: rgba(255, 255, 255, 28);"
-        "color: white;"
+        "color: %1;"
         "border: 1px solid rgba(255,255,255,65);"
-        "border-radius: 6px;"
-        "padding: 6px 10px;"
+        "border-radius: 0px;"
+        "padding: 8px 10px;"
+        "font-size: %2px;"
+        "font-weight: 800;"
         "}"
         "QPushButton:disabled {"
         "color: rgba(255,255,255,120);"
         "background: rgba(255,255,255,14);"
         "border-color: rgba(255,255,255,35);"
         "}"
-        "QPushButton:hover:!disabled { background: rgba(255, 255, 255, 44); }");
-    layout->addWidget(panel);
+        "QPushButton:hover:!disabled { background: rgba(255, 255, 255, 44); }")
+            .arg(m_startMenuFontColor)
+            .arg(m_startMenuFontSize));
 
-    auto *panelLayout = new QVBoxLayout(panel);
-    auto *titleLabel = new QLabel("请选择开始方式", panel);
-    titleLabel->setAlignment(Qt::AlignCenter);
-    titleLabel->setStyleSheet("font-size:18px;font-weight:600;");
-    panelLayout->addWidget(titleLabel);
+    auto *layout = new QVBoxLayout(&dialog);
+    layout->setContentsMargins(0, 0, 0, 0);
 
-    int selectedSlot = 0; // 0: 新游戏，1-3: 对应存档位
+    int selectedSlot = 0; // 0: Start, 1-3: Load slot, -1: Exit
     QVector<QPushButton *> slotButtons;
 
-    auto *newGameBtn = new QPushButton("新开始游戏", panel);
-    newGameBtn->setMinimumHeight(42);
-    connect(newGameBtn, &QPushButton::clicked, &dialog, [&dialog, &selectedSlot]() {
-        selectedSlot = 0;
-        dialog.accept();
-    });
-    panelLayout->addWidget(newGameBtn);
+    auto *stack = new QStackedWidget(&dialog);
+    layout->addWidget(stack);
 
-    auto *settingsBtn = new QPushButton("设置", panel);
-    settingsBtn->setMinimumHeight(36);
+    auto *mainPage = new QWidget(stack);
+    auto *mainPageLayout = new QVBoxLayout(mainPage);
+    mainPageLayout->setContentsMargins(24, 24, 24, 24);
+    mainPageLayout->setSpacing(16);
+    mainPageLayout->addStretch(1);
+    auto *mainButtonsRow = new QHBoxLayout();
+    mainButtonsRow->setContentsMargins(0, 0, 0, 0);
+    mainButtonsRow->setSpacing(14);
+    auto *startBtn = new QPushButton("Start", mainPage);
+    auto *loadBtn = new QPushButton("Load", mainPage);
+    auto *settingBtn = new QPushButton("Setting", mainPage);
+    auto *exitBtn = new QPushButton("Exit", mainPage);
+    const QList<QPushButton *> mainButtons = {startBtn, loadBtn, settingBtn, exitBtn};
+    for (QPushButton *btn : mainButtons) {
+        btn->setMinimumHeight(56);
+        btn->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        mainButtonsRow->addWidget(btn, 1);
+    }
+    mainPageLayout->addLayout(mainButtonsRow);
+    mainPageLayout->addStretch(2);
+
+    auto *loadPage = new QWidget(stack);
+    auto *loadPageLayout = new QVBoxLayout(loadPage);
+    loadPageLayout->setContentsMargins(16, 16, 16, 16);
+    auto *loadTitle = new QLabel("Load Slots", loadPage);
+    loadTitle->setAlignment(Qt::AlignCenter);
+    loadPageLayout->addWidget(loadTitle);
     for (int slot = 1; slot <= kMaxSaveSlots; ++slot) {
-        auto *btn = new QPushButton(panel);
+        auto *btn = new QPushButton(loadPage);
         btn->setMinimumHeight(52);
         connect(btn, &QPushButton::clicked, &dialog, [&dialog, &selectedSlot, slot]() {
             selectedSlot = slot;
             dialog.accept();
         });
         slotButtons.append(btn);
-        panelLayout->addWidget(btn);
+        loadPageLayout->addWidget(btn);
     }
-    panelLayout->addWidget(settingsBtn);
+    auto *backBtn = new QPushButton("Back", loadPage);
+    backBtn->setMinimumHeight(36);
+    loadPageLayout->addWidget(backBtn);
+
+    stack->addWidget(mainPage);
+    stack->addWidget(loadPage);
+    stack->setCurrentWidget(mainPage);
 
     const auto refreshSlotButtons = [this, &slotButtons]() {
         for (int slot = 1; slot <= kMaxSaveSlots; ++slot) {
@@ -658,15 +814,26 @@ bool PlayerWindow::showStartMenu(QString *errorMsg)
         }
     };
 
-    connect(settingsBtn, &QPushButton::clicked, &dialog, [this, &refreshSlotButtons]() {
+    connect(loadBtn, &QPushButton::clicked, &dialog, [&refreshSlotButtons, stack, loadPage]() {
+        refreshSlotButtons();
+        stack->setCurrentWidget(loadPage);
+    });
+    connect(backBtn, &QPushButton::clicked, &dialog, [stack, mainPage]() {
+        stack->setCurrentWidget(mainPage);
+    });
+    connect(startBtn, &QPushButton::clicked, &dialog, [&dialog, &selectedSlot]() {
+        selectedSlot = 0;
+        dialog.accept();
+    });
+    connect(settingBtn, &QPushButton::clicked, &dialog, [this, &refreshSlotButtons]() {
         showSettingsDialog();
         refreshSlotButtons();
     });
+    connect(exitBtn, &QPushButton::clicked, &dialog, [&dialog, &selectedSlot]() {
+        selectedSlot = -1;
+        dialog.accept();
+    });
     refreshSlotButtons();
-
-    auto *cancelButtons = new QDialogButtonBox(QDialogButtonBox::Cancel, panel);
-    connect(cancelButtons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-    panelLayout->addWidget(cancelButtons);
 
     if (dialog.exec() != QDialog::Accepted) {
         if (errorMsg) {
@@ -675,11 +842,21 @@ bool PlayerWindow::showStartMenu(QString *errorMsg)
         return false;
     }
 
+    if (selectedSlot == -1) {
+        close();
+        return false;
+    }
     if (selectedSlot > 0) {
+        if (m_saveButton) {
+            m_saveButton->setVisible(true);
+        }
         return loadFromSlot(selectedSlot, errorMsg);
     }
 
     m_currentIndex = 0;
+    if (m_saveButton) {
+        m_saveButton->setVisible(true);
+    }
     return true;
 }
 
@@ -854,9 +1031,42 @@ void PlayerWindow::updateSaveButtonGeometry()
         return;
     }
     const int margin = 14;
-    const int buttonWidth = 112;
-    m_saveButton->setFixedWidth(buttonWidth);
-    m_saveButton->move(this->width() - buttonWidth - margin, margin);
+    m_saveButton->move(this->width() - m_saveButton->width() - margin, this->height() - m_saveButton->height() - margin);
+    if (m_autoPlayIndicator) {
+        m_autoPlayIndicator->move(this->width() - m_autoPlayIndicator->width() - margin, margin);
+    }
+}
+
+void PlayerWindow::tryScheduleAutoAdvance()
+{
+    if (!m_autoPlayEnabled || !m_autoAdvanceTimer) {
+        return;
+    }
+    if (m_typewriter.isRunning()) {
+        return;
+    }
+    if (m_currentIndex + 1 >= m_script.size()) {
+        m_autoAdvanceTimer->stop();
+        return;
+    }
+    m_autoAdvanceTimer->start(2000);
+}
+
+void PlayerWindow::applyDialogueTextStyle()
+{
+    if (m_nameItem) {
+        QFont font = m_nameItem->font();
+        font.setPointSize(m_dialogueNameFontSize);
+        font.setBold(true);
+        m_nameItem->setFont(font);
+        m_nameItem->setDefaultTextColor(QColor(m_dialogueNameFontColor));
+    }
+    if (m_textItem) {
+        QFont font = m_textItem->font();
+        font.setPointSize(m_dialogueTextFontSize);
+        m_textItem->setFont(font);
+        m_textItem->setDefaultTextColor(QColor(m_dialogueTextFontColor));
+    }
 }
 
 void PlayerWindow::updateViewTransform()

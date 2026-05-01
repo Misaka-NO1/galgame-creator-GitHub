@@ -55,6 +55,26 @@ void Background::setBgmPath(const QString &bgmPath)
     m_bgmPath = bgmPath;
 }
 
+int Background::bgmStartDialogueId() const
+{
+    return m_bgmStartDialogueId;
+}
+
+void Background::setBgmStartDialogueId(int id)
+{
+    m_bgmStartDialogueId = id;
+}
+
+int Background::bgmEndDialogueId() const
+{
+    return m_bgmEndDialogueId;
+}
+
+void Background::setBgmEndDialogueId(int id)
+{
+    m_bgmEndDialogueId = id;
+}
+
 QJsonObject Background::toJson() const
 {
     QJsonObject json;
@@ -63,6 +83,8 @@ QJsonObject Background::toJson() const
     json["startDialogueId"] = m_startDialogueId;
     json["endDialogueId"] = m_endDialogueId;
     json["bgmPath"] = m_bgmPath;
+    json["bgmStartDialogueId"] = m_bgmStartDialogueId;
+    json["bgmEndDialogueId"] = m_bgmEndDialogueId;
     return json;
 }
 
@@ -74,12 +96,19 @@ Background *Background::fromJson(const QJsonObject &json, QObject *parent)
     background->setStartDialogueId(json.value("startDialogueId").toInt(1));
     background->setEndDialogueId(json.value("endDialogueId").toInt(background->startDialogueId()));
     background->setBgmPath(json.value("bgmPath").toString());
+    background->setBgmStartDialogueId(json.value("bgmStartDialogueId").toInt(background->startDialogueId()));
+    background->setBgmEndDialogueId(json.value("bgmEndDialogueId").toInt(background->endDialogueId()));
     return background;
 }
 
 bool Background::coversDialogue(int dialogueId) const
 {
     return dialogueId >= m_startDialogueId && dialogueId <= m_endDialogueId;
+}
+
+bool Background::coversBgmDialogue(int dialogueId) const
+{
+    return dialogueId >= m_bgmStartDialogueId && dialogueId <= m_bgmEndDialogueId;
 }
 
 bool Background::conflictsWith(const Background &other) const

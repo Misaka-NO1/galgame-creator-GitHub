@@ -158,6 +158,66 @@ void Project::setStartMenuBgmPath(const QString &path)
     m_startMenuBgmPath = path;
 }
 
+int Project::startMenuFontSize() const
+{
+    return m_startMenuFontSize;
+}
+
+void Project::setStartMenuFontSize(int size)
+{
+    m_startMenuFontSize = qBound(8, size, 96);
+}
+
+QString Project::startMenuFontColor() const
+{
+    return m_startMenuFontColor;
+}
+
+void Project::setStartMenuFontColor(const QString &color)
+{
+    m_startMenuFontColor = color.trimmed().isEmpty() ? QString("#FFFFFF") : color.trimmed();
+}
+
+int Project::dialogueNameFontSize() const
+{
+    return m_dialogueNameFontSize;
+}
+
+void Project::setDialogueNameFontSize(int size)
+{
+    m_dialogueNameFontSize = qBound(8, size, 96);
+}
+
+QString Project::dialogueNameFontColor() const
+{
+    return m_dialogueNameFontColor;
+}
+
+void Project::setDialogueNameFontColor(const QString &color)
+{
+    m_dialogueNameFontColor = color.trimmed().isEmpty() ? QString("#FFFFFF") : color.trimmed();
+}
+
+int Project::dialogueTextFontSize() const
+{
+    return m_dialogueTextFontSize;
+}
+
+void Project::setDialogueTextFontSize(int size)
+{
+    m_dialogueTextFontSize = qBound(8, size, 96);
+}
+
+QString Project::dialogueTextFontColor() const
+{
+    return m_dialogueTextFontColor;
+}
+
+void Project::setDialogueTextFontColor(const QString &color)
+{
+    m_dialogueTextFontColor = color.trimmed().isEmpty() ? QString("#FFFFFF") : color.trimmed();
+}
+
 QList<Character *> Project::characters() const
 {
     return m_characters;
@@ -171,6 +231,11 @@ QList<Dialogue *> Project::dialogues() const
 QList<Background *> Project::backgrounds() const
 {
     return m_backgrounds;
+}
+
+QList<BgmTrack *> Project::bgmTracks() const
+{
+    return m_bgmTracks;
 }
 
 QList<QObject *> Project::characterObjects() const
@@ -199,6 +264,16 @@ QList<QObject *> Project::backgroundObjects() const
     result.reserve(m_backgrounds.size());
     for (Background *background : m_backgrounds) {
         result.append(background);
+    }
+    return result;
+}
+
+QList<QObject *> Project::bgmTrackObjects() const
+{
+    QList<QObject *> result;
+    result.reserve(m_bgmTracks.size());
+    for (BgmTrack *track : m_bgmTracks) {
+        result.append(track);
     }
     return result;
 }
@@ -240,14 +315,25 @@ void Project::addBackground(Background *background)
     m_backgrounds.append(background);
 }
 
+void Project::addBgmTrack(BgmTrack *track)
+{
+    if (!track) {
+        return;
+    }
+    track->setParent(this);
+    m_bgmTracks.append(track);
+}
+
 void Project::clear()
 {
     qDeleteAll(m_characters);
     qDeleteAll(m_dialogues);
     qDeleteAll(m_backgrounds);
+    qDeleteAll(m_bgmTracks);
     m_characters.clear();
     m_dialogues.clear();
     m_backgrounds.clear();
+    m_bgmTracks.clear();
 }
 
 bool Project::saveToFile(const QString &path) const
@@ -273,6 +359,7 @@ bool Project::saveToFile(const QString &path) const
     QJsonArray charactersJson;
     QJsonArray backgroundsJson;
     QJsonArray dialoguesJson;
+    QJsonArray bgmTracksJson;
 
     for (Character *character : m_characters) {
         charactersJson.append(character->toJson());
@@ -283,6 +370,9 @@ bool Project::saveToFile(const QString &path) const
     for (Dialogue *dialogue : m_dialogues) {
         dialoguesJson.append(dialogue->toJson());
     }
+    for (BgmTrack *track : m_bgmTracks) {
+        bgmTracksJson.append(track->toJson());
+    }
 
     QJsonObject root;
     root["name"] = m_name;
@@ -290,9 +380,16 @@ bool Project::saveToFile(const QString &path) const
     root["defaultFont"] = fontToJson(m_defaultFont);
     root["startMenuBackgroundPath"] = m_startMenuBackgroundPath;
     root["startMenuBgmPath"] = m_startMenuBgmPath;
+    root["startMenuFontSize"] = m_startMenuFontSize;
+    root["startMenuFontColor"] = m_startMenuFontColor;
+    root["dialogueNameFontSize"] = m_dialogueNameFontSize;
+    root["dialogueNameFontColor"] = m_dialogueNameFontColor;
+    root["dialogueTextFontSize"] = m_dialogueTextFontSize;
+    root["dialogueTextFontColor"] = m_dialogueTextFontColor;
     root["characters"] = charactersJson;
     root["backgrounds"] = backgroundsJson;
     root["dialogues"] = dialoguesJson;
+    root["bgmTracks"] = bgmTracksJson;
 
     const QJsonDocument doc(root);
     file.write(doc.toJson(QJsonDocument::Indented));
@@ -333,10 +430,17 @@ Project *Project::loadFromFile(const QString &path, QObject *parent, QString *er
     project->setDefaultFont(fontFromJson(root.value("defaultFont")));
     project->setStartMenuBackgroundPath(root.value("startMenuBackgroundPath").toString());
     project->setStartMenuBgmPath(root.value("startMenuBgmPath").toString());
+    project->setStartMenuFontSize(root.value("startMenuFontSize").toInt(22));
+    project->setStartMenuFontColor(root.value("startMenuFontColor").toString("#FFFFFF"));
+    project->setDialogueNameFontSize(root.value("dialogueNameFontSize").toInt(14));
+    project->setDialogueNameFontColor(root.value("dialogueNameFontColor").toString("#FFFFFF"));
+    project->setDialogueTextFontSize(root.value("dialogueTextFontSize").toInt(12));
+    project->setDialogueTextFontColor(root.value("dialogueTextFontColor").toString("#FFFFFF"));
 
     const QJsonArray charactersJson = root.value("characters").toArray();
     const QJsonArray backgroundsJson = root.value("backgrounds").toArray();
     const QJsonArray dialoguesJson = root.value("dialogues").toArray();
+    const QJsonArray bgmTracksJson = root.value("bgmTracks").toArray();
 
     for (const QJsonValue &value : charactersJson) {
         project->addCharacter(Character::fromJson(value.toObject(), project));
@@ -346,6 +450,25 @@ Project *Project::loadFromFile(const QString &path, QObject *parent, QString *er
     }
     for (const QJsonValue &value : dialoguesJson) {
         project->addDialogue(Dialogue::fromJson(value.toObject(), project));
+    }
+    for (const QJsonValue &value : bgmTracksJson) {
+        project->addBgmTrack(BgmTrack::fromJson(value.toObject(), project));
+    }
+
+    if (project->m_bgmTracks.isEmpty()) {
+        int autoId = 1;
+        for (Background *background : project->m_backgrounds) {
+            if (background->bgmPath().trimmed().isEmpty()) {
+                continue;
+            }
+            auto *track = new BgmTrack(project);
+            track->setId(QString("bgm%1").arg(autoId++));
+            track->setBackgroundId(background->id());
+            track->setBgmPath(background->bgmPath());
+            track->setStartDialogueId(background->bgmStartDialogueId());
+            track->setEndDialogueId(background->bgmEndDialogueId());
+            project->addBgmTrack(track);
+        }
     }
 
     // 兼容旧版本/外部数据：若 ID 不连续则自动重排，不直接判加载失败。
@@ -448,6 +571,14 @@ bool Project::removeBackgroundById(const QString &id)
         }
         m_backgrounds.removeAt(i);
         delete background;
+        for (int j = m_bgmTracks.size() - 1; j >= 0; --j) {
+            BgmTrack *track = m_bgmTracks.at(j);
+            if (track->backgroundId() != id) {
+                continue;
+            }
+            m_bgmTracks.removeAt(j);
+            delete track;
+        }
         return true;
     }
     return false;
@@ -484,6 +615,52 @@ const Background *Project::getBackgroundForDialogue(int id) const
         }
     }
     return selected;
+}
+
+const Background *Project::getBgmBackgroundForDialogue(int id) const
+{
+    const Background *bg = getBackgroundForDialogue(id);
+    if (!bg) {
+        return nullptr;
+    }
+    return getBgmTrackForDialogue(id, bg->id()) ? bg : nullptr;
+}
+
+const BgmTrack *Project::getBgmTrackForDialogue(int id, const QString &backgroundId) const
+{
+    const BgmTrack *selected = nullptr;
+    for (const BgmTrack *track : m_bgmTracks) {
+        if (track->bgmPath().trimmed().isEmpty()) {
+            continue;
+        }
+        if (!backgroundId.trimmed().isEmpty() && track->backgroundId() != backgroundId) {
+            continue;
+        }
+        if (!track->coversDialogue(id)) {
+            continue;
+        }
+        if (!selected || track->startDialogueId() >= selected->startDialogueId()) {
+            selected = track;
+        }
+    }
+    return selected;
+}
+
+bool Project::removeBgmTrackById(const QString &id)
+{
+    if (id.trimmed().isEmpty()) {
+        return false;
+    }
+    for (int i = m_bgmTracks.size() - 1; i >= 0; --i) {
+        BgmTrack *track = m_bgmTracks.at(i);
+        if (track->id() != id) {
+            continue;
+        }
+        m_bgmTracks.removeAt(i);
+        delete track;
+        return true;
+    }
+    return false;
 }
 
 const Character *Project::getCharacter(const QString &id) const
