@@ -45,6 +45,33 @@ QString resolveProjectPath(const QString &projectDir, const QString &path)
     return QDir(projectDir).absoluteFilePath(path);
 }
 
+QString resolveExportAudioSourcePath(const QString &projectDir, const QString &rawPath, const QString &resourceSubdir)
+{
+    const QString cleaned = QDir::fromNativeSeparators(rawPath.trimmed());
+    if (cleaned.isEmpty()) {
+        return {};
+    }
+
+    const QString direct = resolveProjectPath(projectDir, cleaned);
+    if (QFileInfo::exists(direct)) {
+        return direct;
+    }
+
+    const QFileInfo inputInfo(cleaned);
+    const QString fileNameOnly = inputInfo.fileName();
+    if (fileNameOnly.isEmpty()) {
+        return {};
+    }
+
+    const QString inResourceDir = QDir(projectDir).absoluteFilePath(
+        QDir::cleanPath(QString("resources/%1/%2").arg(resourceSubdir, fileNameOnly)));
+    if (QFileInfo::exists(inResourceDir)) {
+        return inResourceDir;
+    }
+
+    return {};
+}
+
 bool ensureParentDir(const QString &filePath)
 {
     const QFileInfo info(filePath);
@@ -324,35 +351,59 @@ bool copyPlayerRuntimeDependenciesFallback(const QString &rootDir, const QString
 {
     const QString appDirPath = QCoreApplication::applicationDirPath();
     const QString playerDirPath = QFileInfo(playerPath).absolutePath();
+    const QString qtBinPath = QLibraryInfo::path(QLibraryInfo::BinariesPath);
+    const QString qtPluginsPath = QLibraryInfo::path(QLibraryInfo::PluginsPath);
     QDir appDir(appDirPath);
     QDir playerDir(playerDirPath);
+    QDir qtBinDir(qtBinPath);
+    QDir qtPluginsDir(qtPluginsPath);
 
 #ifdef Q_OS_WIN
+    bool copiedAnyDependency = false;
     auto copyDllByPatterns = [&](const QDir &srcDir, const QStringList &patterns) {
+        if (!srcDir.exists()) {
+            return;
+        }
         const QFileInfoList dlls = srcDir.entryInfoList(patterns, QDir::Files);
         for (const QFileInfo &dll : dlls) {
             const QString dst = QDir(rootDir).filePath(dll.fileName());
-            copyFileSafe(dll.absoluteFilePath(), dst);
+            if (copyFileSafe(dll.absoluteFilePath(), dst)) {
+                copiedAnyDependency = true;
+            }
         }
     };
 
-    // 优先从播放器目录带出依赖，再从编辑器目录补齐。
-    copyDllByPatterns(playerDir, {"Qt6*.dll", "lib*.dll", "icu*.dll"});
-    copyDllByPatterns(appDir, {"Qt6*.dll", "lib*.dll", "icu*.dll"});
+    // 优先从播放器目录与编辑器目录带出依赖，再从 Qt 安装目录补齐。
+    copyDllByPatterns(playerDir, {"Qt6*.dll", "lib*.dll", "icu*.dll", "av*.dll", "sw*.dll"});
+    copyDllByPatterns(appDir, {"Qt6*.dll", "lib*.dll", "icu*.dll", "av*.dll", "sw*.dll"});
+    copyDllByPatterns(qtBinDir, {"Qt6*.dll", "lib*.dll", "icu*.dll", "av*.dll", "sw*.dll"});
 
     const QStringList runtimeDllNames = {
         "libgcc_s_seh-1.dll",
         "libstdc++-6.dll",
-        "libwinpthread-1.dll"
+        "libwinpthread-1.dll",
+        "libssl-3-x64.dll",
+        "libcrypto-3-x64.dll",
+        "libssl-1_1-x64.dll",
+        "libcrypto-1_1-x64.dll"
     };
     for (const QString &dllName : runtimeDllNames) {
         const QString srcFromPlayer = playerDir.filePath(dllName);
         const QString srcFromApp = appDir.filePath(dllName);
+        const QString srcFromQtBin = qtBinDir.filePath(dllName);
         const QString dst = QDir(rootDir).filePath(dllName);
         if (QFileInfo::exists(srcFromPlayer)) {
-            copyFileSafe(srcFromPlayer, dst);
+            if (copyFileSafe(srcFromPlayer, dst)) {
+                copiedAnyDependency = true;
+            }
         } else if (QFileInfo::exists(srcFromApp)) {
-            copyFileSafe(srcFromApp, dst);
+            if (copyFileSafe(srcFromApp, dst)) {
+                copiedAnyDependency = true;
+            }
+        } else if (QFileInfo::exists(srcFromQtBin)) {
+            if (copyFileSafe(srcFromQtBin, dst)) {
+                copiedAnyDependency = true;
+            }
         }
     }
 #endif
@@ -364,6 +415,8 @@ bool copyPlayerRuntimeDependenciesFallback(const QString &rootDir, const QString
             src = playerDir.filePath(name);
         } else if (QDir(appDir.filePath(name)).exists()) {
             src = appDir.filePath(name);
+        } else if (QDir(qtPluginsDir.filePath(name)).exists()) {
+            src = qtPluginsDir.filePath(name);
         }
         if (src.isEmpty()) {
             continue;
@@ -375,7 +428,18 @@ bool copyPlayerRuntimeDependenciesFallback(const QString &rootDir, const QString
             }
             return false;
         }
+#ifdef Q_OS_WIN
+        copiedAnyDependency = true;
+#endif
     }
+#ifdef Q_OS_WIN
+    if (!copiedAnyDependency) {
+        if (errorMsg) {
+            *errorMsg = "未找到可复制的 Qt 运行时依赖。";
+        }
+        return false;
+    }
+#endif
     return true;
 }
 
@@ -383,21 +447,20 @@ bool copyPlayerRuntimeDependencies(const QString &rootDir, const QString &player
 {
 #ifdef Q_OS_WIN
     QString deployError;
-    bool windeployqtSuccess = deployWithWinDeployQt(playerPath, rootDir, &deployError);
-    
-    // 无论 windeployqt 是否成功，都强制执行一次 fallback 逻辑
-    // 以确保 Qt6Multimedia 强依赖的 tls/network 等插件被完整拷贝，
-    // 解决独立导出后无声音的常见 bug。
-    copyPlayerRuntimeDependenciesFallback(rootDir, playerPath, nullptr);
+    const bool windeployqtSuccess = deployWithWinDeployQt(playerPath, rootDir, &deployError);
 
-    if (windeployqtSuccess) {
+    QString fallbackError;
+    const bool fallbackSuccess = copyPlayerRuntimeDependenciesFallback(rootDir, playerPath, &fallbackError);
+
+    if (windeployqtSuccess || fallbackSuccess) {
         return true;
     }
-    
-    if (errorMsg && !deployError.isEmpty()) {
-        *errorMsg = QString("windeployqt 失败：%1").arg(deployError);
+    if (errorMsg) {
+        *errorMsg = QString("复制运行时依赖失败。windeployqt: %1；fallback: %2")
+                        .arg(deployError.isEmpty() ? "未知错误" : deployError,
+                             fallbackError.isEmpty() ? "未知错误" : fallbackError);
     }
-    return true; // 即使 windeployqt 失败，fallback 也已经执行，我们当作成功继续
+    return false;
 #else
     return copyPlayerRuntimeDependenciesFallback(rootDir, playerPath, errorMsg);
 #endif
@@ -679,9 +742,12 @@ bool Exporter::copyResources(const Project &project,
         if (bgm.isEmpty()) {
             continue;
         }
-        const QString bgmSrc = resolveProjectPath(projectDir, bgm);
+        const QString bgmSrc = resolveExportAudioSourcePath(projectDir, bgm, "bgm");
         if (!QFileInfo::exists(bgmSrc)) {
-            continue;
+            if (errorMsg) {
+                *errorMsg = QString("背景音乐文件不存在：%1").arg(bgm);
+            }
+            return false;
         }
         const QString key = track->id().trimmed().isEmpty() ? QString("%1_%2_%3").arg(track->backgroundId()).arg(track->startDialogueId()).arg(track->endDialogueId()) : track->id();
         const QString bgmRel = QDir::cleanPath(QString("assets/bgm/%1_%2")
@@ -706,18 +772,22 @@ bool Exporter::copyResources(const Project &project,
             continue;
         }
 
-        const QString src = resolveProjectPath(projectDir, QDir::cleanPath(QString("resources/voices/%1").arg(voice)));
+        const QString src = resolveExportAudioSourcePath(projectDir, voice, "voices");
         if (!QFileInfo::exists(src)) {
-            ++done;
-            if (progressBar) {
-                progressBar->setValue(10 + (done * 70 / total));
+            if (errorMsg) {
+                *errorMsg = QString("语音文件不存在：%1").arg(voice);
             }
-            continue;
+            return false;
         }
 
         const QString rel = QDir::cleanPath(QString("assets/voices/%1").arg(QFileInfo(src).fileName()));
         const QString dst = root.filePath(rel);
-        copyFileSafe(src, dst);
+        if (!copyFileSafe(src, dst)) {
+            if (errorMsg) {
+                *errorMsg = QString("复制语音资源失败：%1").arg(src);
+            }
+            return false;
+        }
         voiceAssets.insert(voice, rel);
         ++done;
         if (progressBar) {
@@ -910,10 +980,6 @@ ExportDialog::ExportDialog(Project *project, const QString &projectDir, QWidget 
     m_titleEdit = new QLineEdit(this);
     m_titleEdit->setText(project ? project->name() : QString("Galgame"));
 
-    m_resolutionCombo = new QComboBox(this);
-    m_resolutionCombo->addItem("1280x720", QSize(1280, 720));
-    m_resolutionCombo->addItem("1920x1080", QSize(1920, 1080));
-
     m_outputModeCombo = new QComboBox(this);
     m_outputModeCombo->addItem("导出.galgame包");
     m_outputModeCombo->addItem("导出文件夹(调试)");
@@ -922,7 +988,6 @@ ExportDialog::ExportDialog(Project *project, const QString &projectDir, QWidget 
     auto *form = new QFormLayout();
     form->addRow("输出路径", pathRow);
     form->addRow("游戏标题", m_titleEdit);
-    form->addRow("窗口尺寸", m_resolutionCombo);
     form->addRow("导出模式", m_outputModeCombo);
 
     m_progressBar = new QProgressBar(this);
@@ -1026,7 +1091,7 @@ ExportOptions ExportDialog::buildOptions() const
     if (opts.gameTitle.isEmpty() && m_project) {
         opts.gameTitle = m_project->name();
     }
-    opts.windowSize = m_resolutionCombo->currentData().toSize();
+    opts.windowSize = QSize(1920, 1080);
     opts.outputFolderOnly = (m_outputModeCombo->currentIndex() == 1);
     return opts;
 }

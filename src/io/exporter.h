@@ -16,7 +16,7 @@ struct ExportOptions
 {
     QString outputPath;
     QString gameTitle;
-    QSize windowSize = QSize(1280, 720);
+    QSize windowSize = QSize(1920, 1080);
     bool outputFolderOnly = false;
 };
 
@@ -67,7 +67,6 @@ private:
 
     QLineEdit *m_outputPathEdit = nullptr;
     QLineEdit *m_titleEdit = nullptr;
-    QComboBox *m_resolutionCombo = nullptr;
     QComboBox *m_outputModeCombo = nullptr;
     QProgressBar *m_progressBar = nullptr;
     QLabel *m_statusLabel = nullptr;
