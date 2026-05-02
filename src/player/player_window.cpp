@@ -129,31 +129,13 @@ PlayerWindow::PlayerWindow(QWidget *parent)
     m_saveButton = new QPushButton(QString::fromUtf8("\xE2\x9A\x99"), this);
     m_saveButton->setFixedSize(40, 40);
     m_saveButton->setCursor(Qt::PointingHandCursor);
-    m_saveButton->setStyleSheet(
-        "QPushButton {"
-        "background: rgba(0,0,0,150);"
-        "color: white;"
-        "border: 1px solid #777;"
-        "border-radius: 20px;"
-        "font-size: 20px;"
-        "font-weight: 700;"
-        "padding: 0;"
-        "}");
     connect(m_saveButton, &QPushButton::clicked, this, &PlayerWindow::onSettingsButtonClicked);
 
     m_autoPlayIndicator = new QLabel(">", this);
     m_autoPlayIndicator->setAlignment(Qt::AlignCenter);
     m_autoPlayIndicator->setFixedSize(34, 34);
-    m_autoPlayIndicator->setStyleSheet(
-        "QLabel {"
-        "background: rgba(0, 0, 0, 165);"
-        "color: #7CFC00;"
-        "border: 1px solid rgba(255,255,255,130);"
-        "border-radius: 17px;"
-        "font-size: 20px;"
-        "font-weight: 800;"
-        "}");
     m_autoPlayIndicator->setVisible(false);
+    applyHudButtonStyles();
 
     updateSaveButtonGeometry();
     m_saveButton->raise();
@@ -536,10 +518,13 @@ bool PlayerWindow::loadFromDirectory(const QString &dirPath, QString *errorMsg)
     const QJsonObject dialogueStyle = uiStyle.value("dialogue").toObject();
     m_startMenuFontSize = qBound(8, startStyle.value("fontSize").toInt(22), 96);
     m_startMenuFontColor = normalizeColor(startStyle.value("fontColor").toString("#FFFFFF"), "#FFFFFF");
+    m_autoPlayIndicatorColor = normalizeColor(startStyle.value("autoPlayIndicatorColor").toString("#7CFC00"), "#7CFC00");
+    m_settingsButtonColor = normalizeColor(startStyle.value("settingsButtonColor").toString("#FFFFFF"), "#FFFFFF");
     m_dialogueNameFontSize = qBound(8, dialogueStyle.value("nameFontSize").toInt(14), 96);
     m_dialogueNameFontColor = normalizeColor(dialogueStyle.value("nameFontColor").toString("#FFFFFF"), "#FFFFFF");
     m_dialogueTextFontSize = qBound(8, dialogueStyle.value("textFontSize").toInt(12), 96);
     m_dialogueTextFontColor = normalizeColor(dialogueStyle.value("textFontColor").toString("#FFFFFF"), "#FFFFFF");
+    applyHudButtonStyles();
     applyDialogueTextStyle();
 
     if (m_script.isEmpty()) {
@@ -1112,4 +1097,33 @@ QString PlayerWindow::resolveAssetPath(const QString &assetRelPath) const
         return QDir::cleanPath(assetRelPath);
     }
     return QDir(m_baseDir).absoluteFilePath(assetRelPath);
+}
+
+void PlayerWindow::applyHudButtonStyles()
+{
+    if (m_saveButton) {
+        m_saveButton->setStyleSheet(
+            QString("QPushButton {"
+                    "background: rgba(0,0,0,150);"
+                    "color: %1;"
+                    "border: 1px solid #777;"
+                    "border-radius: 20px;"
+                    "font-size: 20px;"
+                    "font-weight: 700;"
+                    "padding: 0;"
+                    "}")
+                .arg(m_settingsButtonColor));
+    }
+    if (m_autoPlayIndicator) {
+        m_autoPlayIndicator->setStyleSheet(
+            QString("QLabel {"
+                    "background: rgba(0, 0, 0, 165);"
+                    "color: %1;"
+                    "border: 1px solid rgba(255,255,255,130);"
+                    "border-radius: 17px;"
+                    "font-size: 20px;"
+                    "font-weight: 800;"
+                    "}")
+                .arg(m_autoPlayIndicatorColor));
+    }
 }

@@ -677,6 +677,8 @@ void MainWindow::onProjectPropertiesChanged()
     m_project->setDialogueNameFontColor(m_projectDialogueNameFontColorEdit->text().trimmed());
     m_project->setDialogueTextFontSize(m_projectDialogueTextFontSizeSpin->value());
     m_project->setDialogueTextFontColor(m_projectDialogueTextFontColorEdit->text().trimmed());
+    m_project->setAutoPlayIndicatorColor(m_projectAutoPlayIndicatorColorEdit->text().trimmed());
+    m_project->setSettingsButtonColor(m_projectSettingsButtonColorEdit->text().trimmed());
 }
 
 void MainWindow::onCharacterPropertiesChanged()
@@ -1037,6 +1039,32 @@ void MainWindow::onPickStartMenuFontColor()
     emit dataChanged();
 }
 
+void MainWindow::onPickAutoPlayIndicatorColor()
+{
+    const QColor picked = QColorDialog::getColor(QColor(m_projectAutoPlayIndicatorColorEdit->text().trimmed()),
+                                                 this,
+                                                 "选择自动播放图标颜色");
+    if (!picked.isValid()) {
+        return;
+    }
+    m_projectAutoPlayIndicatorColorEdit->setText(picked.name(QColor::HexRgb).toUpper());
+    onProjectPropertiesChanged();
+    emit dataChanged();
+}
+
+void MainWindow::onPickSettingsButtonColor()
+{
+    const QColor picked = QColorDialog::getColor(QColor(m_projectSettingsButtonColorEdit->text().trimmed()),
+                                                 this,
+                                                 "选择设置按钮颜色");
+    if (!picked.isValid()) {
+        return;
+    }
+    m_projectSettingsButtonColorEdit->setText(picked.name(QColor::HexRgb).toUpper());
+    onProjectPropertiesChanged();
+    emit dataChanged();
+}
+
 void MainWindow::onPickDialogueNameFontColor()
 {
     const QColor picked = QColorDialog::getColor(QColor(m_projectDialogueNameFontColorEdit->text().trimmed()),
@@ -1196,6 +1224,18 @@ void MainWindow::setupPropertyDock()
     projectDialogueTextColorRow->addWidget(m_projectDialogueTextFontColorEdit);
     projectDialogueTextColorRow->addWidget(m_projectDialogueTextFontColorButton);
 
+    m_projectAutoPlayIndicatorColorEdit = new QLineEdit(page0);
+    m_projectAutoPlayIndicatorColorButton = new QPushButton("取色...", page0);
+    auto *projectAutoPlayColorRow = new QHBoxLayout();
+    projectAutoPlayColorRow->addWidget(m_projectAutoPlayIndicatorColorEdit);
+    projectAutoPlayColorRow->addWidget(m_projectAutoPlayIndicatorColorButton);
+
+    m_projectSettingsButtonColorEdit = new QLineEdit(page0);
+    m_projectSettingsButtonColorButton = new QPushButton("取色...", page0);
+    auto *projectSettingsButtonColorRow = new QHBoxLayout();
+    projectSettingsButtonColorRow->addWidget(m_projectSettingsButtonColorEdit);
+    projectSettingsButtonColorRow->addWidget(m_projectSettingsButtonColorButton);
+
     projectForm->addRow("开始界面背景", projectBgRow);
     projectForm->addRow("开始界面音乐", projectBgmRow);
     projectForm->addRow("开始界面字号", m_projectStartFontSizeSpin);
@@ -1204,6 +1244,8 @@ void MainWindow::setupPropertyDock()
     projectForm->addRow("姓名字色", projectDialogueNameColorRow);
     projectForm->addRow("对白字号", m_projectDialogueTextFontSizeSpin);
     projectForm->addRow("对白字色", projectDialogueTextColorRow);
+    projectForm->addRow("自动播放图标色", projectAutoPlayColorRow);
+    projectForm->addRow("设置按钮颜色", projectSettingsButtonColorRow);
     page0Layout->addLayout(projectForm);
     page0Layout->addStretch(1);
     m_stackProperties->addWidget(page0);
@@ -1341,9 +1383,13 @@ void MainWindow::setupPropertyDock()
     connect(m_projectDialogueNameFontColorEdit, &QLineEdit::textEdited, this, &MainWindow::onProjectPropertiesChanged);
     connect(m_projectDialogueTextFontSizeSpin, &QSpinBox::valueChanged, this, &MainWindow::onProjectPropertiesChanged);
     connect(m_projectDialogueTextFontColorEdit, &QLineEdit::textEdited, this, &MainWindow::onProjectPropertiesChanged);
+    connect(m_projectAutoPlayIndicatorColorEdit, &QLineEdit::textEdited, this, &MainWindow::onProjectPropertiesChanged);
+    connect(m_projectSettingsButtonColorEdit, &QLineEdit::textEdited, this, &MainWindow::onProjectPropertiesChanged);
     connect(m_projectStartBgBrowseButton, &QPushButton::clicked, this, &MainWindow::onBrowseStartMenuBackground);
     connect(m_projectStartBgmBrowseButton, &QPushButton::clicked, this, &MainWindow::onBrowseStartMenuBgm);
     connect(m_projectStartFontColorButton, &QPushButton::clicked, this, &MainWindow::onPickStartMenuFontColor);
+    connect(m_projectAutoPlayIndicatorColorButton, &QPushButton::clicked, this, &MainWindow::onPickAutoPlayIndicatorColor);
+    connect(m_projectSettingsButtonColorButton, &QPushButton::clicked, this, &MainWindow::onPickSettingsButtonColor);
     connect(m_projectDialogueNameFontColorButton, &QPushButton::clicked, this, &MainWindow::onPickDialogueNameFontColor);
     connect(m_projectDialogueTextFontColorButton, &QPushButton::clicked, this, &MainWindow::onPickDialogueTextFontColor);
     connect(m_projectStartBgEdit, &QLineEdit::editingFinished, this, [this]() { emit dataChanged(); });
@@ -1354,6 +1400,8 @@ void MainWindow::setupPropertyDock()
     connect(m_projectDialogueNameFontColorEdit, &QLineEdit::editingFinished, this, [this]() { emit dataChanged(); });
     connect(m_projectDialogueTextFontSizeSpin, &QSpinBox::editingFinished, this, [this]() { emit dataChanged(); });
     connect(m_projectDialogueTextFontColorEdit, &QLineEdit::editingFinished, this, [this]() { emit dataChanged(); });
+    connect(m_projectAutoPlayIndicatorColorEdit, &QLineEdit::editingFinished, this, [this]() { emit dataChanged(); });
+    connect(m_projectSettingsButtonColorEdit, &QLineEdit::editingFinished, this, [this]() { emit dataChanged(); });
 }
 
 void MainWindow::setupTimelineDock()
@@ -1516,6 +1564,8 @@ void MainWindow::refreshPropertyPage()
     m_projectDialogueNameFontColorEdit->setText(m_project->dialogueNameFontColor());
     m_projectDialogueTextFontSizeSpin->setValue(m_project->dialogueTextFontSize());
     m_projectDialogueTextFontColorEdit->setText(m_project->dialogueTextFontColor());
+    m_projectAutoPlayIndicatorColorEdit->setText(m_project->autoPlayIndicatorColor());
+    m_projectSettingsButtonColorEdit->setText(m_project->settingsButtonColor());
     const QList<Character *> characters = m_project->characters();
     for (Character *character : characters) {
         m_dialogueCharacterCombo->addItem(character->name(), character->id());

@@ -817,6 +817,8 @@ bool Exporter::generateGameJson(const Project &project,
     QJsonObject startStyle;
     startStyle["fontSize"] = project.startMenuFontSize();
     startStyle["fontColor"] = project.startMenuFontColor();
+    startStyle["autoPlayIndicatorColor"] = project.autoPlayIndicatorColor();
+    startStyle["settingsButtonColor"] = project.settingsButtonColor();
     uiStyle["startMenu"] = startStyle;
 
     QJsonObject dialogueStyle;

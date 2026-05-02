@@ -218,6 +218,26 @@ void Project::setDialogueTextFontColor(const QString &color)
     m_dialogueTextFontColor = color.trimmed().isEmpty() ? QString("#FFFFFF") : color.trimmed();
 }
 
+QString Project::autoPlayIndicatorColor() const
+{
+    return m_autoPlayIndicatorColor;
+}
+
+void Project::setAutoPlayIndicatorColor(const QString &color)
+{
+    m_autoPlayIndicatorColor = color.trimmed().isEmpty() ? QString("#7CFC00") : color.trimmed();
+}
+
+QString Project::settingsButtonColor() const
+{
+    return m_settingsButtonColor;
+}
+
+void Project::setSettingsButtonColor(const QString &color)
+{
+    m_settingsButtonColor = color.trimmed().isEmpty() ? QString("#FFFFFF") : color.trimmed();
+}
+
 QList<Character *> Project::characters() const
 {
     return m_characters;
@@ -386,6 +406,8 @@ bool Project::saveToFile(const QString &path) const
     root["dialogueNameFontColor"] = m_dialogueNameFontColor;
     root["dialogueTextFontSize"] = m_dialogueTextFontSize;
     root["dialogueTextFontColor"] = m_dialogueTextFontColor;
+    root["autoPlayIndicatorColor"] = m_autoPlayIndicatorColor;
+    root["settingsButtonColor"] = m_settingsButtonColor;
     root["characters"] = charactersJson;
     root["backgrounds"] = backgroundsJson;
     root["dialogues"] = dialoguesJson;
@@ -436,6 +458,8 @@ Project *Project::loadFromFile(const QString &path, QObject *parent, QString *er
     project->setDialogueNameFontColor(root.value("dialogueNameFontColor").toString("#FFFFFF"));
     project->setDialogueTextFontSize(root.value("dialogueTextFontSize").toInt(12));
     project->setDialogueTextFontColor(root.value("dialogueTextFontColor").toString("#FFFFFF"));
+    project->setAutoPlayIndicatorColor(root.value("autoPlayIndicatorColor").toString("#7CFC00"));
+    project->setSettingsButtonColor(root.value("settingsButtonColor").toString("#FFFFFF"));
 
     const QJsonArray charactersJson = root.value("characters").toArray();
     const QJsonArray backgroundsJson = root.value("backgrounds").toArray();

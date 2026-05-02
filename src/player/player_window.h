@@ -87,6 +87,7 @@ private:
     void loadQuickSlot();
     void tryScheduleAutoAdvance();
     QString resolveAssetPath(const QString &assetRelPath) const;
+    void applyHudButtonStyles();
 
     QGraphicsView *m_view = nullptr;
     QGraphicsScene *m_scene = nullptr;
@@ -120,6 +121,8 @@ private:
     QString m_startMenuBgmPath;
     int m_startMenuFontSize = 22;
     QString m_startMenuFontColor = "#FFFFFF";
+    QString m_autoPlayIndicatorColor = "#7CFC00";
+    QString m_settingsButtonColor = "#FFFFFF";
     int m_dialogueNameFontSize = 14;
     QString m_dialogueNameFontColor = "#FFFFFF";
     int m_dialogueTextFontSize = 12;
