@@ -482,9 +482,22 @@ bool writeLauncherScript(const QString &rootDir, QString *errorMsg)
         "setlocal\r\n"
         "set \"ROOT=%~dp0\"\r\n"
         "set \"ROOT=%ROOT:~0,-1%\"\r\n"
-        "\"%ROOT%\\galplayer.exe\" \"%ROOT%\"\r\n";
+        "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$ErrorActionPreference='SilentlyContinue'; Unblock-File -LiteralPath '%ROOT%\\galplayer.exe'; Get-ChildItem -LiteralPath '%ROOT%' -File -Include *.dll,*.exe | ForEach-Object { Unblock-File -LiteralPath $_.FullName }\" >nul 2>nul\r\n"
+        "start \"\" \"%ROOT%\\galplayer.exe\" \"%ROOT%\"\r\n";
     launcherBat.write(batContent);
     launcherBat.close();
+
+    // 额外生成英文文件名启动器，避免部分系统脚本环境下中文路径识别失败。
+    const QString launcherAsciiBatPath = QDir(rootDir).filePath("run_game.bat");
+    QFile launcherAsciiBat(launcherAsciiBatPath);
+    if (!launcherAsciiBat.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        if (errorMsg) {
+            *errorMsg = "无法创建英文启动脚本。";
+        }
+        return false;
+    }
+    launcherAsciiBat.write(batContent);
+    launcherAsciiBat.close();
 
     // 默认无终端启动器：双击只保留游戏界面。
     const QString launcherVbsPath = QDir(rootDir).filePath("启动游戏.vbs");
@@ -499,13 +512,13 @@ bool writeLauncherScript(const QString &rootDir, QString *errorMsg)
         "Set fso = CreateObject(\"Scripting.FileSystemObject\")\r\n"
         "Set shell = CreateObject(\"WScript.Shell\")\r\n"
         "root = fso.GetParentFolderName(WScript.ScriptFullName)\r\n"
-        "exe = root & \"\\\\galplayer.exe\"\r\n"
-        "If Not fso.FileExists(exe) Then\r\n"
-        "  MsgBox \"galplayer.exe not found: \" & exe, 16, \"Start Failed\"\r\n"
+        "bat = root & \"\\\\run_game.bat\"\r\n"
+        "If Not fso.FileExists(bat) Then\r\n"
+        "  MsgBox \"launcher not found: \" & bat, 16, \"Start Failed\"\r\n"
         "  WScript.Quit 1\r\n"
         "End If\r\n"
         "shell.CurrentDirectory = root\r\n"
-        "shell.Run Chr(34) & exe & Chr(34) & \" \" & Chr(34) & root & Chr(34), 1, False\r\n";
+        "shell.Run Chr(34) & bat & Chr(34), 0, False\r\n";
     launcherVbs.write(vbsContent);
     return true;
 #else
