@@ -41,6 +41,7 @@ namespace {
 constexpr int kMaxSaveSlots = 3;
 constexpr const char *kBgmVolumeKey = "audio/bgmVolume";
 constexpr const char *kVoiceVolumeKey = "audio/voiceVolume";
+constexpr const char *kNarratorCharacterId = "__narrator__";
 
 QString normalizeColor(const QString &raw, const QString &fallback)
 {
@@ -594,6 +595,7 @@ void PlayerWindow::renderCurrentLine()
     m_textItem->setPlainText(QString());
 
     const RuntimeLine &line = m_script.at(m_currentIndex);
+    const bool isNarrator = line.characterId == QString::fromLatin1(kNarratorCharacterId);
     const int nameSize = line.nameFontSizeOverride > 0 ? line.nameFontSizeOverride : m_dialogueNameFontSize;
     const int textSize = line.textFontSizeOverride > 0 ? line.textFontSizeOverride : m_dialogueTextFontSize;
     const QString nameColor = line.nameFontColorOverride.trimmed().isEmpty()
@@ -615,7 +617,15 @@ void PlayerWindow::renderCurrentLine()
         m_textItem->setFont(font);
         m_textItem->setDefaultTextColor(QColor(textColor));
     }
-    m_nameItem->setPlainText(m_charDisplayNames.value(line.characterId, line.characterId));
+    if (m_nameItem) {
+        if (isNarrator) {
+            m_nameItem->setPlainText(QString());
+            m_nameItem->setVisible(false);
+        } else {
+            m_nameItem->setVisible(true);
+            m_nameItem->setPlainText(m_charDisplayNames.value(line.characterId, line.characterId));
+        }
+    }
 
     QPixmap bg(resolveAssetPath(line.backgroundPath));
     if (bg.isNull()) {

@@ -9,6 +9,7 @@
 #include <QLineEdit>
 
 namespace {
+constexpr const char *kNarratorCharacterId = "__narrator__";
 
 QString effectToText(Dialogue::SpecialEffect effect)
 {
@@ -56,6 +57,7 @@ DialogueEditDialog::DialogueEditDialog(Dialogue *dialogue, Project *project, QWi
     m_effectCombo->addItems({"none", "shake", "flash", "fade"});
 
     if (m_project) {
+        m_characterCombo->addItem(QStringLiteral("旁白"), QString::fromLatin1(kNarratorCharacterId));
         const QList<Character *> characters = m_project->characters();
         for (Character *character : characters) {
             m_characterCombo->addItem(character->name(), character->id());

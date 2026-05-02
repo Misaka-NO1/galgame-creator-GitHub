@@ -30,6 +30,7 @@
 #include <QOperatingSystemVersion>
 
 namespace {
+constexpr const char *kNarratorCharacterId = "__narrator__";
 
 QString resolveProjectPath(const QString &projectDir, const QString &path)
 {
@@ -560,13 +561,6 @@ bool Exporter::validateProject(const Project &project, const QString &projectDir
         }
         return false;
     }
-    if (characters.isEmpty()) {
-        if (errorMsg) {
-            *errorMsg = "项目没有角色。";
-        }
-        return false;
-    }
-
     for (Character *character : characters) {
         if (character->portraitPath().trimmed().isEmpty()) {
             if (errorMsg) {
@@ -584,7 +578,9 @@ bool Exporter::validateProject(const Project &project, const QString &projectDir
     }
 
     for (Dialogue *dialogue : dialogues) {
-        if (!project.getCharacter(dialogue->characterId())) {
+        const QString characterId = dialogue->characterId().trimmed();
+        const bool isNarrator = characterId == QString::fromLatin1(kNarratorCharacterId);
+        if (!isNarrator && !project.getCharacter(characterId)) {
             if (errorMsg) {
                 *errorMsg = QString("对话 #%1 没有关联有效角色。").arg(dialogue->id());
             }
@@ -786,7 +782,8 @@ bool Exporter::generateGameJson(const Project &project,
         scriptLine["type"] = "dialogue";
         scriptLine["id"] = dialogue->id();
         scriptLine["char"] = dialogue->characterId();
-        scriptLine["charName"] = character ? character->name() : dialogue->characterId();
+        const bool isNarrator = dialogue->characterId() == QString::fromLatin1(kNarratorCharacterId);
+        scriptLine["charName"] = isNarrator ? QString() : (character ? character->name() : dialogue->characterId());
         scriptLine["text"] = dialogue->text();
         scriptLine["bg"] = bg ? bg->id() : QString();
         scriptLine["bgPath"] = bg ? backgroundAssets.value(bg->id()).toString() : QString();
@@ -794,7 +791,7 @@ bool Exporter::generateGameJson(const Project &project,
         scriptLine["voice"] = dialogue->voiceFile();
         scriptLine["voicePath"] = voiceAssets.value(dialogue->voiceFile()).toString();
         scriptLine["effect"] = dialogue->toJson().value("specialEffect").toString("none");
-        scriptLine["portraitScale"] = character ? character->portraitScale() : 100;
+        scriptLine["portraitScale"] = (!isNarrator && character) ? character->portraitScale() : 100;
         scriptLine["nameFontSizeOverride"] = dialogue->nameFontSizeOverride();
         scriptLine["nameFontColorOverride"] = dialogue->nameFontColorOverride();
         scriptLine["textFontSizeOverride"] = dialogue->textFontSizeOverride();

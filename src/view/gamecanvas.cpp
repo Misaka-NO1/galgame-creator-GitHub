@@ -149,7 +149,9 @@ void GameCanvas::hideCharacterPortrait()
 
 void GameCanvas::showText(const QString &speakerName, const QString &text)
 {
-    m_speakerNameItem->setPlainText(speakerName);
+    const QString normalizedSpeaker = speakerName.trimmed();
+    m_speakerNameItem->setPlainText(normalizedSpeaker);
+    m_speakerNameItem->setVisible(!normalizedSpeaker.isEmpty());
     m_fullText = text;
     m_dialogueTextItem->setPlainText(QString());
     updateTextLayout();

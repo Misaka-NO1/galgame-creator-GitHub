@@ -42,6 +42,7 @@
 namespace {
 
 constexpr int kTreePointerRole = Qt::UserRole + 1;
+constexpr const char *kNarratorCharacterId = "__narrator__";
 
 quintptr ptrToValue(const void *ptr)
 {
@@ -65,7 +66,9 @@ QString dialogueSummary(const Dialogue *dialogue, const Character *character)
         text = text.left(20) + "...";
     }
 
-    const QString speaker = character ? character->name() : QStringLiteral("未知角色");
+    const bool isNarrator = dialogue->characterId() == QString::fromLatin1(kNarratorCharacterId);
+    const QString speaker = isNarrator ? QStringLiteral("旁白")
+                                       : (character ? character->name() : QStringLiteral("未知角色"));
     return QString("#%1 %2: %3").arg(dialogue->id()).arg(speaker, text);
 }
 
@@ -434,18 +437,14 @@ void MainWindow::onBatchAddDialogues()
     if (!m_project) {
         return;
     }
-
     const QList<Character *> characters = m_project->characters();
-    if (characters.isEmpty()) {
-        QMessageBox::information(this, "提示", "请先添加至少一个角色。");
-        return;
-    }
 
     QDialog dialog(this);
     dialog.setWindowTitle("批量生成对话");
     dialog.resize(520, 420);
 
     auto *characterCombo = new QComboBox(&dialog);
+    characterCombo->addItem(QStringLiteral("旁白"), QString::fromLatin1(kNarratorCharacterId));
     for (Character *character : characters) {
         characterCombo->addItem(character->name(), character->id());
     }
@@ -500,7 +499,7 @@ void MainWindow::onBatchAddDialogues()
     int insertIndex = qBound(0, requestedInsertRow - 1, m_project->dialogueCount());
     const QString textTemplate = templateEdit->text().trimmed();
     QString voicePrefix = voicePrefixEdit->text().trimmed();
-    if (voicePrefix.isEmpty()) {
+    if (voicePrefix.isEmpty() && charId != QString::fromLatin1(kNarratorCharacterId)) {
         if (const Character *selectedChar = m_project->getCharacter(charId)) {
             voicePrefix = selectedChar->voicePrefix().trimmed();
         }
@@ -1556,6 +1555,7 @@ void MainWindow::refreshPropertyPage()
     }
 
     m_dialogueCharacterCombo->clear();
+    m_dialogueCharacterCombo->addItem(QStringLiteral("旁白"), QString::fromLatin1(kNarratorCharacterId));
     m_projectStartBgEdit->setText(m_project->startMenuBackgroundPath());
     m_projectStartBgmEdit->setText(m_project->startMenuBgmPath());
     m_projectStartFontSizeSpin->setValue(m_project->startMenuFontSize());
@@ -1665,16 +1665,22 @@ void MainWindow::previewDialogueByRow(int row)
         return;
     }
 
+    const bool isNarrator = dialogue->characterId() == QString::fromLatin1(kNarratorCharacterId);
     const Character *character = m_project->getCharacter(dialogue->characterId());
-    if (!character) {
-        return;
-    }
 
     const Background *background = m_project->getBackgroundForDialogue(dialogue->id());
     Background fallback;
     fallback.setImagePath(QString());
 
-    m_canvas->setDialogue(*dialogue, *character, background ? *background : fallback);
+    Character narratorFallback;
+    narratorFallback.setId(QString::fromLatin1(kNarratorCharacterId));
+    narratorFallback.setName(QString());
+    narratorFallback.setPortraitPath(QString());
+    const Character *speakerForPreview = character;
+    if (isNarrator || !speakerForPreview) {
+        speakerForPreview = &narratorFallback;
+    }
+    m_canvas->setDialogue(*dialogue, *speakerForPreview, background ? *background : fallback);
     m_currentTimelineRow = row;
 
     const QModelIndex index = m_timelineModel->index(row, 0);
@@ -1857,14 +1863,13 @@ void MainWindow::addDialogue()
     }
 
     const QList<Character *> characters = m_project->characters();
-    if (characters.isEmpty()) {
-        QMessageBox::information(this, "提示", "请先添加至少一个角色。");
-        return;
-    }
 
     auto *dialogue = new Dialogue(m_project);
     dialogue->setId(m_project->getNextDialogueId());
-    dialogue->setCharacterId(characters.first()->id());
+    dialogue->setCharacterId(QString::fromLatin1(kNarratorCharacterId));
+    if (!characters.isEmpty()) {
+        dialogue->setCharacterId(characters.first()->id());
+    }
     dialogue->setText("新对话");
     dialogue->setVoiceFile(QString());
     dialogue->setSpecialEffect(Dialogue::SpecialEffect::None);
