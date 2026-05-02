@@ -25,6 +25,7 @@ class Project : public QObject
     Q_PROPERTY(QString dialogueNameFontColor READ dialogueNameFontColor WRITE setDialogueNameFontColor)
     Q_PROPERTY(int dialogueTextFontSize READ dialogueTextFontSize WRITE setDialogueTextFontSize)
     Q_PROPERTY(QString dialogueTextFontColor READ dialogueTextFontColor WRITE setDialogueTextFontColor)
+    Q_PROPERTY(QString dialogueBoxColor READ dialogueBoxColor WRITE setDialogueBoxColor)
     Q_PROPERTY(QString autoPlayIndicatorColor READ autoPlayIndicatorColor WRITE setAutoPlayIndicatorColor)
     Q_PROPERTY(QString settingsButtonColor READ settingsButtonColor WRITE setSettingsButtonColor)
     Q_PROPERTY(QList<QObject *> characters READ characterObjects)
@@ -87,6 +88,10 @@ public:
     QString dialogueTextFontColor() const;
     // 设置对话文本字体颜色。
     void setDialogueTextFontColor(const QString &color);
+    // 获取对话背景框颜色。
+    QString dialogueBoxColor() const;
+    // 设置对话背景框颜色。
+    void setDialogueBoxColor(const QString &color);
     // 获取自动播放图标颜色。
     QString autoPlayIndicatorColor() const;
     // 设置自动播放图标颜色。
@@ -170,6 +175,7 @@ private:
     QString m_dialogueNameFontColor = "#FFFFFF";
     int m_dialogueTextFontSize = 12;
     QString m_dialogueTextFontColor = "#FFFFFF";
+    QString m_dialogueBoxColor = "#000000";
     QString m_autoPlayIndicatorColor = "#7CFC00";
     QString m_settingsButtonColor = "#FFFFFF";
     QList<Character *> m_characters;

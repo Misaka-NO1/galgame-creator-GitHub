@@ -29,6 +29,7 @@
 #include <QMessageBox>
 #include <QModelIndex>
 #include <QPushButton>
+#include <QPixmap>
 #include <QSpinBox>
 #include <QStackedWidget>
 #include <QStatusBar>
@@ -649,6 +650,18 @@ void MainWindow::onShowPropertiesDock()
     }
 }
 
+void MainWindow::onShowTimelineDock()
+{
+    if (!m_timelineDock) {
+        return;
+    }
+    m_timelineDock->setVisible(true);
+    m_timelineDock->raise();
+    if (m_timelineView) {
+        m_timelineView->setFocus();
+    }
+}
+
 void MainWindow::onOpenProjectStyleEditor()
 {
     onShowPropertiesDock();
@@ -676,8 +689,17 @@ void MainWindow::onProjectPropertiesChanged()
     m_project->setDialogueNameFontColor(m_projectDialogueNameFontColorEdit->text().trimmed());
     m_project->setDialogueTextFontSize(m_projectDialogueTextFontSizeSpin->value());
     m_project->setDialogueTextFontColor(m_projectDialogueTextFontColorEdit->text().trimmed());
+    m_project->setDialogueBoxColor(m_projectDialogueBoxColorEdit->text().trimmed());
     m_project->setAutoPlayIndicatorColor(m_projectAutoPlayIndicatorColorEdit->text().trimmed());
     m_project->setSettingsButtonColor(m_projectSettingsButtonColorEdit->text().trimmed());
+    updateStartMenuBackgroundPreview(m_project->startMenuBackgroundPath());
+    if (m_canvas) {
+        m_canvas->setDialogueBoxColor(m_project->dialogueBoxColor());
+        m_canvas->setGlobalDialogueTextStyle(m_project->dialogueNameFontSize(),
+                                             m_project->dialogueNameFontColor(),
+                                             m_project->dialogueTextFontSize(),
+                                             m_project->dialogueTextFontColor());
+    }
 }
 
 void MainWindow::onCharacterPropertiesChanged()
@@ -983,6 +1005,7 @@ void MainWindow::onBrowseStartMenuBackground()
 
     m_project->setStartMenuBackgroundPath(relativePath);
     m_projectStartBgEdit->setText(relativePath);
+    updateStartMenuBackgroundPreview(relativePath);
     emit dataChanged();
 }
 
@@ -1064,6 +1087,19 @@ void MainWindow::onPickSettingsButtonColor()
     emit dataChanged();
 }
 
+void MainWindow::onPickDialogueBoxColor()
+{
+    const QColor picked = QColorDialog::getColor(QColor(m_projectDialogueBoxColorEdit->text().trimmed()),
+                                                 this,
+                                                 "选择对话背景框颜色");
+    if (!picked.isValid()) {
+        return;
+    }
+    m_projectDialogueBoxColorEdit->setText(picked.name(QColor::HexRgb).toUpper());
+    onProjectPropertiesChanged();
+    emit dataChanged();
+}
+
 void MainWindow::onPickDialogueNameFontColor()
 {
     const QColor picked = QColorDialog::getColor(QColor(m_projectDialogueNameFontColorEdit->text().trimmed()),
@@ -1135,6 +1171,7 @@ void MainWindow::setupMenusAndToolbar()
     toolsMenu->addAction("导出游戏", this, &MainWindow::onExportGame);
     toolsMenu->addAction("测试运行", this, &MainWindow::onTestRun);
     toolsMenu->addAction("打开属性编辑器", this, &MainWindow::onShowPropertiesDock);
+    toolsMenu->addAction("打开对话时间轴", this, &MainWindow::onShowTimelineDock);
     toolsMenu->addAction("开始界面与字体样式", this, &MainWindow::onOpenProjectStyleEditor);
 
     auto *toolbar = addToolBar("主工具栏");
@@ -1144,6 +1181,7 @@ void MainWindow::setupMenusAndToolbar()
     toolbar->addAction("添加对话", this, &MainWindow::onAddDialogue);
     toolbar->addAction("批量生成对话", this, &MainWindow::onBatchAddDialogues);
     toolbar->addAction("属性编辑器", this, &MainWindow::onShowPropertiesDock);
+    toolbar->addAction("对话时间轴", this, &MainWindow::onShowTimelineDock);
     toolbar->addAction("样式设置", this, &MainWindow::onOpenProjectStyleEditor);
     m_actionPreviewMode = toolbar->addAction("预览模式");
     m_actionPreviewMode->setCheckable(true);
@@ -1188,6 +1226,11 @@ void MainWindow::setupPropertyDock()
     auto *projectBgRow = new QHBoxLayout();
     projectBgRow->addWidget(m_projectStartBgEdit);
     projectBgRow->addWidget(m_projectStartBgBrowseButton);
+    m_projectStartBgPreviewLabel = new QLabel(page0);
+    m_projectStartBgPreviewLabel->setFixedHeight(140);
+    m_projectStartBgPreviewLabel->setAlignment(Qt::AlignCenter);
+    m_projectStartBgPreviewLabel->setStyleSheet("QLabel { border: 1px solid #555; background: #111; color: #BBB; }");
+    m_projectStartBgPreviewLabel->setText("开始界面背景预览");
 
     m_projectStartBgmEdit = new QLineEdit(page0);
     m_projectStartBgmBrowseButton = new QPushButton("浏览...", page0);
@@ -1223,6 +1266,12 @@ void MainWindow::setupPropertyDock()
     projectDialogueTextColorRow->addWidget(m_projectDialogueTextFontColorEdit);
     projectDialogueTextColorRow->addWidget(m_projectDialogueTextFontColorButton);
 
+    m_projectDialogueBoxColorEdit = new QLineEdit(page0);
+    m_projectDialogueBoxColorButton = new QPushButton("取色...", page0);
+    auto *projectDialogueBoxColorRow = new QHBoxLayout();
+    projectDialogueBoxColorRow->addWidget(m_projectDialogueBoxColorEdit);
+    projectDialogueBoxColorRow->addWidget(m_projectDialogueBoxColorButton);
+
     m_projectAutoPlayIndicatorColorEdit = new QLineEdit(page0);
     m_projectAutoPlayIndicatorColorButton = new QPushButton("取色...", page0);
     auto *projectAutoPlayColorRow = new QHBoxLayout();
@@ -1236,6 +1285,7 @@ void MainWindow::setupPropertyDock()
     projectSettingsButtonColorRow->addWidget(m_projectSettingsButtonColorButton);
 
     projectForm->addRow("开始界面背景", projectBgRow);
+    projectForm->addRow("背景预览", m_projectStartBgPreviewLabel);
     projectForm->addRow("开始界面音乐", projectBgmRow);
     projectForm->addRow("开始界面字号", m_projectStartFontSizeSpin);
     projectForm->addRow("开始界面字色", projectStartFontColorRow);
@@ -1243,6 +1293,7 @@ void MainWindow::setupPropertyDock()
     projectForm->addRow("姓名字色", projectDialogueNameColorRow);
     projectForm->addRow("对白字号", m_projectDialogueTextFontSizeSpin);
     projectForm->addRow("对白字色", projectDialogueTextColorRow);
+    projectForm->addRow("对话框背景色", projectDialogueBoxColorRow);
     projectForm->addRow("自动播放图标色", projectAutoPlayColorRow);
     projectForm->addRow("设置按钮颜色", projectSettingsButtonColorRow);
     page0Layout->addLayout(projectForm);
@@ -1382,6 +1433,7 @@ void MainWindow::setupPropertyDock()
     connect(m_projectDialogueNameFontColorEdit, &QLineEdit::textEdited, this, &MainWindow::onProjectPropertiesChanged);
     connect(m_projectDialogueTextFontSizeSpin, &QSpinBox::valueChanged, this, &MainWindow::onProjectPropertiesChanged);
     connect(m_projectDialogueTextFontColorEdit, &QLineEdit::textEdited, this, &MainWindow::onProjectPropertiesChanged);
+    connect(m_projectDialogueBoxColorEdit, &QLineEdit::textEdited, this, &MainWindow::onProjectPropertiesChanged);
     connect(m_projectAutoPlayIndicatorColorEdit, &QLineEdit::textEdited, this, &MainWindow::onProjectPropertiesChanged);
     connect(m_projectSettingsButtonColorEdit, &QLineEdit::textEdited, this, &MainWindow::onProjectPropertiesChanged);
     connect(m_projectStartBgBrowseButton, &QPushButton::clicked, this, &MainWindow::onBrowseStartMenuBackground);
@@ -1389,6 +1441,7 @@ void MainWindow::setupPropertyDock()
     connect(m_projectStartFontColorButton, &QPushButton::clicked, this, &MainWindow::onPickStartMenuFontColor);
     connect(m_projectAutoPlayIndicatorColorButton, &QPushButton::clicked, this, &MainWindow::onPickAutoPlayIndicatorColor);
     connect(m_projectSettingsButtonColorButton, &QPushButton::clicked, this, &MainWindow::onPickSettingsButtonColor);
+    connect(m_projectDialogueBoxColorButton, &QPushButton::clicked, this, &MainWindow::onPickDialogueBoxColor);
     connect(m_projectDialogueNameFontColorButton, &QPushButton::clicked, this, &MainWindow::onPickDialogueNameFontColor);
     connect(m_projectDialogueTextFontColorButton, &QPushButton::clicked, this, &MainWindow::onPickDialogueTextFontColor);
     connect(m_projectStartBgEdit, &QLineEdit::editingFinished, this, [this]() { emit dataChanged(); });
@@ -1399,6 +1452,7 @@ void MainWindow::setupPropertyDock()
     connect(m_projectDialogueNameFontColorEdit, &QLineEdit::editingFinished, this, [this]() { emit dataChanged(); });
     connect(m_projectDialogueTextFontSizeSpin, &QSpinBox::editingFinished, this, [this]() { emit dataChanged(); });
     connect(m_projectDialogueTextFontColorEdit, &QLineEdit::editingFinished, this, [this]() { emit dataChanged(); });
+    connect(m_projectDialogueBoxColorEdit, &QLineEdit::editingFinished, this, [this]() { emit dataChanged(); });
     connect(m_projectAutoPlayIndicatorColorEdit, &QLineEdit::editingFinished, this, [this]() { emit dataChanged(); });
     connect(m_projectSettingsButtonColorEdit, &QLineEdit::editingFinished, this, [this]() { emit dataChanged(); });
 }
@@ -1557,6 +1611,7 @@ void MainWindow::refreshPropertyPage()
     m_dialogueCharacterCombo->clear();
     m_dialogueCharacterCombo->addItem(QStringLiteral("旁白"), QString::fromLatin1(kNarratorCharacterId));
     m_projectStartBgEdit->setText(m_project->startMenuBackgroundPath());
+    updateStartMenuBackgroundPreview(m_project->startMenuBackgroundPath());
     m_projectStartBgmEdit->setText(m_project->startMenuBgmPath());
     m_projectStartFontSizeSpin->setValue(m_project->startMenuFontSize());
     m_projectStartFontColorEdit->setText(m_project->startMenuFontColor());
@@ -1564,6 +1619,14 @@ void MainWindow::refreshPropertyPage()
     m_projectDialogueNameFontColorEdit->setText(m_project->dialogueNameFontColor());
     m_projectDialogueTextFontSizeSpin->setValue(m_project->dialogueTextFontSize());
     m_projectDialogueTextFontColorEdit->setText(m_project->dialogueTextFontColor());
+    m_projectDialogueBoxColorEdit->setText(m_project->dialogueBoxColor());
+    if (m_canvas) {
+        m_canvas->setDialogueBoxColor(m_project->dialogueBoxColor());
+        m_canvas->setGlobalDialogueTextStyle(m_project->dialogueNameFontSize(),
+                                             m_project->dialogueNameFontColor(),
+                                             m_project->dialogueTextFontSize(),
+                                             m_project->dialogueTextFontColor());
+    }
     m_projectAutoPlayIndicatorColorEdit->setText(m_project->autoPlayIndicatorColor());
     m_projectSettingsButtonColorEdit->setText(m_project->settingsButtonColor());
     const QList<Character *> characters = m_project->characters();
@@ -1652,6 +1715,35 @@ void MainWindow::refreshBackgroundConflictLabel(Background *target)
     }
 
     m_bgConflictLabel->setText(conflicted ? "警告：范围冲突" : "无冲突");
+}
+
+void MainWindow::updateStartMenuBackgroundPreview(const QString &path)
+{
+    if (!m_projectStartBgPreviewLabel) {
+        return;
+    }
+    const QString trimmedPath = path.trimmed();
+    if (trimmedPath.isEmpty()) {
+        m_projectStartBgPreviewLabel->setPixmap(QPixmap());
+        m_projectStartBgPreviewLabel->setText("开始界面背景预览");
+        return;
+    }
+
+    const QString absolutePath = QDir::isAbsolutePath(trimmedPath)
+        ? QDir::cleanPath(trimmedPath)
+        : QDir(m_projectPath).absoluteFilePath(trimmedPath);
+    QPixmap preview(absolutePath);
+    if (preview.isNull()) {
+        m_projectStartBgPreviewLabel->setPixmap(QPixmap());
+        m_projectStartBgPreviewLabel->setText(QString("预览失败：%1").arg(trimmedPath));
+        return;
+    }
+
+    const QPixmap scaled = preview.scaled(m_projectStartBgPreviewLabel->size(),
+                                          Qt::KeepAspectRatio,
+                                          Qt::SmoothTransformation);
+    m_projectStartBgPreviewLabel->setText(QString());
+    m_projectStartBgPreviewLabel->setPixmap(scaled);
 }
 
 void MainWindow::previewDialogueByRow(int row)

@@ -103,6 +103,25 @@ void GameCanvas::setDialogue(const Dialogue &d, const Character &speaker, const 
         showCharacterPortrait(speaker.portraitPath(), speaker.position(), speaker.portraitScale());
     }
 
+    const int nameSize = d.nameFontSizeOverride() > 0 ? d.nameFontSizeOverride() : m_globalNameFontSize;
+    const int textSize = d.textFontSizeOverride() > 0 ? d.textFontSizeOverride() : m_globalTextFontSize;
+    const QString nameColor = d.nameFontColorOverride().trimmed().isEmpty() ? m_globalNameFontColor : d.nameFontColorOverride().trimmed();
+    const QString textColor = d.textFontColorOverride().trimmed().isEmpty() ? m_globalTextFontColor : d.textFontColorOverride().trimmed();
+    if (m_speakerNameItem) {
+        QFont nameFont = m_speakerNameItem->font();
+        nameFont.setPointSize(qBound(8, nameSize, 96));
+        nameFont.setBold(true);
+        m_speakerNameItem->setFont(nameFont);
+        const QColor color(nameColor);
+        m_speakerNameItem->setDefaultTextColor(color.isValid() ? color : QColorConstants::White);
+    }
+    if (m_dialogueTextItem) {
+        QFont textFont = m_dialogueTextItem->font();
+        textFont.setPointSize(qBound(8, textSize, 96));
+        m_dialogueTextItem->setFont(textFont);
+        const QColor color(textColor);
+        m_dialogueTextItem->setDefaultTextColor(color.isValid() ? color : QColorConstants::White);
+    }
     showText(speaker.name(), d.text());
 }
 
@@ -187,6 +206,36 @@ void GameCanvas::setAutoPlay(bool enabled, int msDelay)
 void GameCanvas::setResourceBaseDir(const QString &baseDir)
 {
     m_resourceBaseDir = QDir::cleanPath(baseDir);
+}
+
+void GameCanvas::setDialogueBoxColor(const QString &color)
+{
+    if (!m_dialogueBoxItem) {
+        return;
+    }
+    QColor dialogueBoxColor(color.trimmed());
+    if (!dialogueBoxColor.isValid()) {
+        dialogueBoxColor = QColorConstants::Black;
+    }
+    dialogueBoxColor.setAlpha(180);
+    m_dialogueBoxItem->setBrush(QBrush(dialogueBoxColor));
+}
+
+void GameCanvas::setGlobalDialogueTextStyle(int nameFontSize,
+                                            const QString &nameFontColor,
+                                            int textFontSize,
+                                            const QString &textFontColor)
+{
+    m_globalNameFontSize = qBound(8, nameFontSize, 96);
+    m_globalTextFontSize = qBound(8, textFontSize, 96);
+    m_globalNameFontColor = nameFontColor.trimmed();
+    m_globalTextFontColor = textFontColor.trimmed();
+    if (m_globalNameFontColor.isEmpty()) {
+        m_globalNameFontColor = "#FFFFFF";
+    }
+    if (m_globalTextFontColor.isEmpty()) {
+        m_globalTextFontColor = "#FFFFFF";
+    }
 }
 
 void GameCanvas::mousePressEvent(QMouseEvent *e)
@@ -280,11 +329,8 @@ void GameCanvas::setBackgroundImage(const QString &imagePath)
 
 void GameCanvas::updateTextLayout()
 {
-    const qreal baseTop = 580.0;
-    const qreal maxBottom = 710.0;
-    const qreal height = m_dialogueTextItem->boundingRect().height();
-    const qreal top = qMax(baseTop, maxBottom - height);
-    m_dialogueTextItem->setPos(50.0, top);
+    // 与运行时播放器保持一致：对白固定起始位置，不随文本高度上移。
+    m_dialogueTextItem->setPos(50.0, 580.0);
 }
 
 void GameCanvas::updateViewTransform()

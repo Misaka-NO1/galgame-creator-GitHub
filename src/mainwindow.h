@@ -63,6 +63,7 @@ private slots:
     void onExportGame();
     void onTestRun();
     void onShowPropertiesDock();
+    void onShowTimelineDock();
     void onOpenProjectStyleEditor();
 
     void onProjectPropertiesChanged();
@@ -76,6 +77,7 @@ private slots:
     void onPickStartMenuFontColor();
     void onPickAutoPlayIndicatorColor();
     void onPickSettingsButtonColor();
+    void onPickDialogueBoxColor();
     void onPickDialogueNameFontColor();
     void onPickDialogueTextFontColor();
     void onPickDialogueLineNameFontColor();
@@ -108,6 +110,7 @@ private:
     void refreshTree();
     void refreshTimeline();
     void refreshPropertyPage();
+    void updateStartMenuBackgroundPreview(const QString &path);
     void refreshBackgroundConflictLabel(Background *target);
     void previewDialogueByRow(int row);
 
@@ -151,6 +154,7 @@ private:
     QLabel *m_emptyPropertyLabel = nullptr;
     QLineEdit *m_projectStartBgEdit = nullptr;
     QPushButton *m_projectStartBgBrowseButton = nullptr;
+    QLabel *m_projectStartBgPreviewLabel = nullptr;
     QLineEdit *m_projectStartBgmEdit = nullptr;
     QPushButton *m_projectStartBgmBrowseButton = nullptr;
     QSpinBox *m_projectStartFontSizeSpin = nullptr;
@@ -162,6 +166,8 @@ private:
     QSpinBox *m_projectDialogueTextFontSizeSpin = nullptr;
     QLineEdit *m_projectDialogueTextFontColorEdit = nullptr;
     QPushButton *m_projectDialogueTextFontColorButton = nullptr;
+    QLineEdit *m_projectDialogueBoxColorEdit = nullptr;
+    QPushButton *m_projectDialogueBoxColorButton = nullptr;
     QLineEdit *m_projectAutoPlayIndicatorColorEdit = nullptr;
     QPushButton *m_projectAutoPlayIndicatorColorButton = nullptr;
     QLineEdit *m_projectSettingsButtonColorEdit = nullptr;

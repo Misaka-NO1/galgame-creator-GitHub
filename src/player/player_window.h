@@ -127,6 +127,7 @@ private:
     QString m_dialogueNameFontColor = "#FFFFFF";
     int m_dialogueTextFontSize = 12;
     QString m_dialogueTextFontColor = "#FFFFFF";
+    QString m_dialogueBoxColor = "#000000";
     bool m_startMenuPending = false;
     bool m_startMenuShown = false;
 };

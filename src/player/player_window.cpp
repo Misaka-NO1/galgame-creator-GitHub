@@ -525,6 +525,7 @@ bool PlayerWindow::loadFromDirectory(const QString &dirPath, QString *errorMsg)
     m_dialogueNameFontColor = normalizeColor(dialogueStyle.value("nameFontColor").toString("#FFFFFF"), "#FFFFFF");
     m_dialogueTextFontSize = qBound(8, dialogueStyle.value("textFontSize").toInt(12), 96);
     m_dialogueTextFontColor = normalizeColor(dialogueStyle.value("textFontColor").toString("#FFFFFF"), "#FFFFFF");
+    m_dialogueBoxColor = normalizeColor(dialogueStyle.value("boxColor").toString("#000000"), "#000000");
     applyHudButtonStyles();
     applyDialogueTextStyle();
 
@@ -1049,6 +1050,14 @@ void PlayerWindow::tryScheduleAutoAdvance()
 
 void PlayerWindow::applyDialogueTextStyle()
 {
+    if (m_dialogBox) {
+        QColor panel = QColor(m_dialogueBoxColor);
+        if (!panel.isValid()) {
+            panel = QColorConstants::Black;
+        }
+        panel.setAlpha(180);
+        m_dialogBox->setBrush(QBrush(panel));
+    }
     if (m_nameItem) {
         QFont font = m_nameItem->font();
         font.setPointSize(m_dialogueNameFontSize);

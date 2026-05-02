@@ -823,6 +823,7 @@ bool Exporter::generateGameJson(const Project &project,
     dialogueStyle["nameFontColor"] = project.dialogueNameFontColor();
     dialogueStyle["textFontSize"] = project.dialogueTextFontSize();
     dialogueStyle["textFontColor"] = project.dialogueTextFontColor();
+    dialogueStyle["boxColor"] = project.dialogueBoxColor();
     uiStyle["dialogue"] = dialogueStyle;
     root["uiStyle"] = uiStyle;
 

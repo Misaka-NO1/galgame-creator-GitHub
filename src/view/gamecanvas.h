@@ -41,6 +41,13 @@ public:
     void setAutoPlay(bool enabled, int msDelay);
     // 设置资源路径基准目录（用于解析相对图片路径）。
     void setResourceBaseDir(const QString &baseDir);
+    // 设置对话背景框颜色（支持 #RRGGBB）。
+    void setDialogueBoxColor(const QString &color);
+    // 设置全局对话文字样式（姓名/对白）。
+    void setGlobalDialogueTextStyle(int nameFontSize,
+                                    const QString &nameFontColor,
+                                    int textFontSize,
+                                    const QString &textFontColor);
 
 signals:
     // 用户点击或按键请求推进到下一句。
@@ -80,6 +87,10 @@ private:
 
     QString m_fullText;
     QString m_resourceBaseDir;
+    int m_globalNameFontSize = 14;
+    QString m_globalNameFontColor = "#FFFFFF";
+    int m_globalTextFontSize = 12;
+    QString m_globalTextFontColor = "#FFFFFF";
     int m_typingSpeedMs = 20;
     bool m_clickToAdvance = true;
     bool m_autoPlayEnabled = false;
