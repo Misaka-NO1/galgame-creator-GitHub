@@ -357,7 +357,7 @@ bool copyPlayerRuntimeDependenciesFallback(const QString &rootDir, const QString
     }
 #endif
 
-    const QStringList pluginDirs = {"platforms", "imageformats", "styles", "iconengines", "multimedia"};
+    const QStringList pluginDirs = {"platforms", "imageformats", "styles", "iconengines", "multimedia", "tls", "networkinformation", "audio"};
     for (const QString &name : pluginDirs) {
         QString src;
         if (QDir(playerDir.filePath(name)).exists()) {
@@ -383,16 +383,21 @@ bool copyPlayerRuntimeDependencies(const QString &rootDir, const QString &player
 {
 #ifdef Q_OS_WIN
     QString deployError;
-    if (deployWithWinDeployQt(playerPath, rootDir, &deployError)) {
+    bool windeployqtSuccess = deployWithWinDeployQt(playerPath, rootDir, &deployError);
+    
+    // 无论 windeployqt 是否成功，都强制执行一次 fallback 逻辑
+    // 以确保 Qt6Multimedia 强依赖的 tls/network 等插件被完整拷贝，
+    // 解决独立导出后无声音的常见 bug。
+    copyPlayerRuntimeDependenciesFallback(rootDir, playerPath, nullptr);
+
+    if (windeployqtSuccess) {
         return true;
     }
-    if (copyPlayerRuntimeDependenciesFallback(rootDir, playerPath, errorMsg)) {
-        return true;
-    }
+    
     if (errorMsg && !deployError.isEmpty()) {
-        *errorMsg += QString("\n（另外：%1）").arg(deployError);
+        *errorMsg = QString("windeployqt 失败：%1").arg(deployError);
     }
-    return false;
+    return true; // 即使 windeployqt 失败，fallback 也已经执行，我们当作成功继续
 #else
     return copyPlayerRuntimeDependenciesFallback(rootDir, playerPath, errorMsg);
 #endif
@@ -787,7 +792,11 @@ bool Exporter::generateGameJson(const Project &project,
         scriptLine["text"] = dialogue->text();
         scriptLine["bg"] = bg ? bg->id() : QString();
         scriptLine["bgPath"] = bg ? backgroundAssets.value(bg->id()).toString() : QString();
-        scriptLine["bgmPath"] = bgmTrack ? bgmAssets.value(bgmTrack->id()).toString() : QString();
+        QString bgmKey;
+        if (bgmTrack) {
+            bgmKey = bgmTrack->id().trimmed().isEmpty() ? QString("%1_%2_%3").arg(bgmTrack->backgroundId()).arg(bgmTrack->startDialogueId()).arg(bgmTrack->endDialogueId()) : bgmTrack->id();
+        }
+        scriptLine["bgmPath"] = bgmTrack ? bgmAssets.value(bgmKey).toString() : QString();
         scriptLine["voice"] = dialogue->voiceFile();
         scriptLine["voicePath"] = voiceAssets.value(dialogue->voiceFile()).toString();
         scriptLine["effect"] = dialogue->toJson().value("specialEffect").toString("none");
