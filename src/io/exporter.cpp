@@ -236,15 +236,14 @@ bool ensureGalplayerBinaryReady(QString *outPlayerPath, QString *errorMsg)
     const QString binary = playerBinaryName();
 
     const QString localBinary = QDir(appDir).filePath(binary);
-    if (QFileInfo::exists(localBinary)) {
-        *outPlayerPath = localBinary;
-        return true;
-    }
-
     const QString buildDir = findNearestCMakeBuildDir(appDir);
     if (buildDir.isEmpty()) {
+        if (QFileInfo::exists(localBinary)) {
+            *outPlayerPath = localBinary;
+            return true;
+        }
         if (errorMsg) {
-            *errorMsg = "未找到 CMake 构建目录，无法自动构建 galplayer。";
+            *errorMsg = "未找到 CMake 构建目录，且本地不存在 galplayer。";
         }
         return false;
     }
@@ -254,8 +253,13 @@ bool ensureGalplayerBinaryReady(QString *outPlayerPath, QString *errorMsg)
     if (!runBuildGalplayer(buildDir, config, &buildError)) {
         // 再尝试一次无 config 构建（兼容单配置生成器）。
         if (!runBuildGalplayer(buildDir, QString(), &buildError)) {
+            // 构建失败时回退到现有本地播放器，避免阻塞导出。
+            if (QFileInfo::exists(localBinary)) {
+                *outPlayerPath = localBinary;
+                return true;
+            }
             if (errorMsg) {
-                *errorMsg = QString("自动构建 galplayer 失败：%1").arg(buildError);
+                *errorMsg = QString("自动构建 galplayer 失败且无可用本地播放器：%1").arg(buildError);
             }
             return false;
         }
