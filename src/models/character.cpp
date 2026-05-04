@@ -120,6 +120,26 @@ void Character::setPosition(Position position)
     m_position = position;
 }
 
+int Character::portraitX() const
+{
+    return m_portraitX;
+}
+
+void Character::setPortraitX(int x)
+{
+    m_portraitX = x;
+}
+
+int Character::portraitY() const
+{
+    return m_portraitY;
+}
+
+void Character::setPortraitY(int y)
+{
+    m_portraitY = y;
+}
+
 QJsonObject Character::toJson() const
 {
     QJsonObject json;
@@ -130,6 +150,8 @@ QJsonObject Character::toJson() const
     json["voicePrefix"] = m_voicePrefix;
     json["portraitScale"] = m_portraitScale;
     json["position"] = positionToString(m_position);
+    json["portraitX"] = m_portraitX;
+    json["portraitY"] = m_portraitY;
     return json;
 }
 
@@ -142,7 +164,24 @@ Character *Character::fromJson(const QJsonObject &json, QObject *parent)
     character->setAvatarPath(json.value("avatarPath").toString());
     character->setVoicePrefix(json.value("voicePrefix").toString());
     character->setPortraitScale(json.value("portraitScale").toInt(100));
-    character->setPosition(positionFromString(json.value("position").toString()));
+    const Character::Position position = positionFromString(json.value("position").toString());
+    character->setPosition(position);
+    if (json.contains("portraitX")) {
+        character->setPortraitX(json.value("portraitX").toInt(320));
+    } else {
+        if (position == Character::Position::Left) {
+            character->setPortraitX(100);
+        } else if (position == Character::Position::Right) {
+            character->setPortraitX(620);
+        } else {
+            character->setPortraitX(320);
+        }
+    }
+    if (json.contains("portraitY")) {
+        character->setPortraitY(json.value("portraitY").toInt(-60));
+    } else {
+        character->setPortraitY(-60);
+    }
     return character;
 }
 

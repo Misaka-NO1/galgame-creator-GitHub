@@ -4,6 +4,7 @@
 #include "../view/typewritereffect.h"
 
 #include <QMainWindow>
+#include <QMediaPlayer>
 
 class QGraphicsScene;
 class QGraphicsView;
@@ -41,6 +42,7 @@ private slots:
     void onAdvanceRequested();
     void onTextUpdated(const QString &text);
     void onTextFinished();
+    void onVoicePlaybackStateChanged(QMediaPlayer::PlaybackState state);
     void onSettingsButtonClicked();
     void onSaveButtonClicked();
 
@@ -60,6 +62,8 @@ private:
         QString bgmPath;
         QString voicePath;
         int portraitScale = 100;
+        int portraitX = 320;
+        int portraitY = -60;
         int nameFontSizeOverride = 0;
         QString nameFontColorOverride;
         int textFontSizeOverride = 0;
@@ -83,6 +87,7 @@ private:
     void renderCurrentLine();
     void updateViewTransform();
     void toggleFullScreenMode();
+    void returnToStartMenuAfterStoryEnd();
     void saveQuickSlot();
     void loadQuickSlot();
     void tryScheduleAutoAdvance();
@@ -104,6 +109,8 @@ private:
     QAudioOutput *m_bgmOutput = nullptr;
     QTimer *m_autoAdvanceTimer = nullptr;
     bool m_autoPlayEnabled = false;
+    bool m_waitingVoiceFinishForAutoAdvance = false;
+    bool m_waitingVoiceFinishForStoryEnd = false;
     QString m_currentBgmPath;
 
     TypewriterEffect m_typewriter;

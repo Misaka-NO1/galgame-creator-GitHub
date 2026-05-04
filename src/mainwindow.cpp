@@ -715,9 +715,30 @@ void MainWindow::onCharacterPropertiesChanged()
 
     character->setName(m_charNameEdit->text().trimmed());
     character->setPortraitPath(m_charPortraitEdit->text().trimmed());
-    character->setPosition(textToPosition(m_charPositionCombo->currentText()));
+    const Character::Position presetPos = textToPosition(m_charPositionCombo->currentText());
+    character->setPosition(presetPos);
+    if (sender() == m_charPositionCombo) {
+        int presetX = 320;
+        if (presetPos == Character::Position::Left) {
+            presetX = 100;
+        } else if (presetPos == Character::Position::Right) {
+            presetX = 620;
+        }
+        m_charPosXSpin->setValue(presetX);
+    }
+    character->setPortraitX(m_charPosXSpin->value());
+    character->setPortraitY(m_charPosYSpin->value());
     character->setPortraitScale(m_charScaleSpin->value());
     character->setVoicePrefix(m_charVoicePrefixEdit->text().trimmed());
+
+    // 角色属性改动时，若当前预览句正好使用该角色，立即刷新画布。
+    if (m_currentTimelineRow >= 0 && m_currentTimelineRow < m_project->dialogueCount()) {
+        if (Dialogue *previewingDialogue = m_project->dialogueAt(m_currentTimelineRow)) {
+            if (previewingDialogue->characterId() == character->id()) {
+                previewDialogueByRow(m_currentTimelineRow);
+            }
+        }
+    }
 
     // 角色文本输入过程中不做全量刷新，避免树和属性页重建导致重入/闪退。
 }
@@ -1306,13 +1327,19 @@ void MainWindow::setupPropertyDock()
     m_charPortraitEdit = new QLineEdit(page1);
     m_charPositionCombo = new QComboBox(page1);
     m_charPositionCombo->addItems({"左", "中", "右"});
+    m_charPosXSpin = new QSpinBox(page1);
+    m_charPosXSpin->setRange(-5000, 5000);
+    m_charPosYSpin = new QSpinBox(page1);
+    m_charPosYSpin->setRange(-5000, 5000);
     m_charScaleSpin = new QSpinBox(page1);
     m_charScaleSpin->setRange(10, 300);
     m_charScaleSpin->setSuffix("%");
     m_charVoicePrefixEdit = new QLineEdit(page1);
     form1->addRow("名称", m_charNameEdit);
     form1->addRow("立绘路径", m_charPortraitEdit);
-    form1->addRow("位置", m_charPositionCombo);
+    form1->addRow("预设位置", m_charPositionCombo);
+    form1->addRow("立绘X", m_charPosXSpin);
+    form1->addRow("立绘Y", m_charPosYSpin);
     form1->addRow("立绘大小", m_charScaleSpin);
     form1->addRow("语音前缀", m_charVoicePrefixEdit);
     m_stackProperties->addWidget(page1);
@@ -1392,6 +1419,8 @@ void MainWindow::setupPropertyDock()
     connect(m_charNameEdit, &QLineEdit::textEdited, this, &MainWindow::onCharacterPropertiesChanged);
     connect(m_charPortraitEdit, &QLineEdit::textEdited, this, &MainWindow::onCharacterPropertiesChanged);
     connect(m_charPositionCombo, &QComboBox::currentTextChanged, this, &MainWindow::onCharacterPropertiesChanged);
+    connect(m_charPosXSpin, &QSpinBox::valueChanged, this, &MainWindow::onCharacterPropertiesChanged);
+    connect(m_charPosYSpin, &QSpinBox::valueChanged, this, &MainWindow::onCharacterPropertiesChanged);
     connect(m_charScaleSpin, &QSpinBox::valueChanged, this, &MainWindow::onCharacterPropertiesChanged);
     connect(m_charVoicePrefixEdit, &QLineEdit::textEdited, this, &MainWindow::onCharacterPropertiesChanged);
     connect(m_charNameEdit, &QLineEdit::editingFinished, this, [this]() { emit dataChanged(); });
@@ -1640,6 +1669,8 @@ void MainWindow::refreshPropertyPage()
         m_charNameEdit->setText(character->name());
         m_charPortraitEdit->setText(character->portraitPath());
         m_charPositionCombo->setCurrentText(positionToText(character->position()));
+        m_charPosXSpin->setValue(character->portraitX());
+        m_charPosYSpin->setValue(character->portraitY());
         m_charScaleSpin->setValue(character->portraitScale());
         m_charVoicePrefixEdit->setText(character->voicePrefix());
         m_updatingPropertyWidgets = false;
@@ -1793,6 +1824,8 @@ void MainWindow::addCharacter()
     character->setId(QString("char%1").arg(nextIndex));
     character->setName(QString("角色%1").arg(nextIndex));
     character->setPosition(Character::Position::Center);
+    character->setPortraitX(320);
+    character->setPortraitY(-60);
     m_project->addCharacter(character);
 
     CharacterEditor dialog(character, m_projectPath, this);

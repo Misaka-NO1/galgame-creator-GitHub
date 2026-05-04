@@ -100,7 +100,10 @@ void GameCanvas::setDialogue(const Dialogue &d, const Character &speaker, const 
     setBackgroundImage(bg.imagePath());
 
     if (!speaker.portraitPath().trimmed().isEmpty()) {
-        showCharacterPortrait(speaker.portraitPath(), speaker.position(), speaker.portraitScale());
+        showCharacterPortrait(speaker.portraitPath(),
+                             speaker.portraitX(),
+                             speaker.portraitY(),
+                             speaker.portraitScale());
     }
 
     const int nameSize = d.nameFontSizeOverride() > 0 ? d.nameFontSizeOverride() : m_globalNameFontSize;
@@ -136,7 +139,7 @@ void GameCanvas::clearScene()
     m_fullText.clear();
 }
 
-void GameCanvas::showCharacterPortrait(const QString &imagePath, Character::Position pos, int scalePercent)
+void GameCanvas::showCharacterPortrait(const QString &imagePath, int posX, int posY, int scalePercent)
 {
     const QString resolvedPath = resolveImagePath(imagePath, m_resourceBaseDir);
     QPixmap portrait(resolvedPath);
@@ -149,14 +152,8 @@ void GameCanvas::showCharacterPortrait(const QString &imagePath, Character::Posi
     const QPixmap scaled = portrait.scaledToHeight(targetHeight, Qt::SmoothTransformation);
     m_portraitItem->setPixmap(scaled);
 
-    qreal x = 100.0;
-    if (pos == Character::Position::Center) {
-        x = (kVirtualWidth - scaled.width()) / 2.0;
-    } else if (pos == Character::Position::Right) {
-        x = kVirtualWidth - scaled.width() - 100.0;
-    }
-
-    const qreal y = 540.0 - scaled.height();
+    const qreal x = posX;
+    const qreal y = posY;
     m_portraitItem->setPos(x, y);
     m_portraitItem->setVisible(true);
 }

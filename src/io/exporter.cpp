@@ -884,6 +884,8 @@ bool Exporter::generateGameJson(const Project &project,
         scriptLine["voicePath"] = voiceAssets.value(dialogue->voiceFile()).toString();
         scriptLine["effect"] = dialogue->toJson().value("specialEffect").toString("none");
         scriptLine["portraitScale"] = (!isNarrator && character) ? character->portraitScale() : 100;
+        scriptLine["portraitX"] = (!isNarrator && character) ? character->portraitX() : 320;
+        scriptLine["portraitY"] = (!isNarrator && character) ? character->portraitY() : -60;
         scriptLine["nameFontSizeOverride"] = dialogue->nameFontSizeOverride();
         scriptLine["nameFontColorOverride"] = dialogue->nameFontColorOverride();
         scriptLine["textFontSizeOverride"] = dialogue->textFontSizeOverride();

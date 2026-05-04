@@ -176,6 +176,8 @@ private:
     QLineEdit *m_charNameEdit = nullptr;
     QLineEdit *m_charPortraitEdit = nullptr;
     QComboBox *m_charPositionCombo = nullptr;
+    QSpinBox *m_charPosXSpin = nullptr;
+    QSpinBox *m_charPosYSpin = nullptr;
     QSpinBox *m_charScaleSpin = nullptr;
     QLineEdit *m_charVoicePrefixEdit = nullptr;
 

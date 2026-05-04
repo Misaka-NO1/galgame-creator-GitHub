@@ -147,6 +147,8 @@ PlayerWindow::PlayerWindow(QWidget *parent)
     const double savedVoiceVolume = QSettings().value(kVoiceVolumeKey, 1.0).toDouble();
     m_voiceOutput->setVolume(qBound(0.0, savedVoiceVolume, 1.0));
     m_voicePlayer->setAudioOutput(m_voiceOutput);
+    connect(m_voicePlayer, &QMediaPlayer::playbackStateChanged,
+            this, &PlayerWindow::onVoicePlaybackStateChanged);
 
     m_bgmPlayer = new QMediaPlayer(this);
     m_bgmOutput = new QAudioOutput(this);
@@ -291,7 +293,43 @@ void PlayerWindow::onTextUpdated(const QString &text)
 
 void PlayerWindow::onTextFinished()
 {
+    if (m_currentIndex >= 0 && m_currentIndex == m_script.size() - 1) {
+        const RuntimeLine &line = m_script.at(m_currentIndex);
+        const QString voiceAbsPath = resolveAssetPath(line.voicePath);
+        const bool hasVoice = !voiceAbsPath.isEmpty() && QFileInfo::exists(voiceAbsPath);
+        if (hasVoice && m_voicePlayer && m_voicePlayer->playbackState() == QMediaPlayer::PlayingState) {
+            m_waitingVoiceFinishForStoryEnd = true;
+            return;
+        }
+        returnToStartMenuAfterStoryEnd();
+        return;
+    }
     tryScheduleAutoAdvance();
+}
+
+void PlayerWindow::onVoicePlaybackStateChanged(QMediaPlayer::PlaybackState state)
+{
+    if (state == QMediaPlayer::PlayingState) {
+        return;
+    }
+    if (m_waitingVoiceFinishForStoryEnd) {
+        m_waitingVoiceFinishForStoryEnd = false;
+        returnToStartMenuAfterStoryEnd();
+        return;
+    }
+    if (!m_waitingVoiceFinishForAutoAdvance) {
+        return;
+    }
+    if (!m_autoPlayEnabled || !m_autoAdvanceTimer || m_typewriter.isRunning()) {
+        return;
+    }
+    if (m_currentIndex + 1 >= m_script.size()) {
+        m_autoAdvanceTimer->stop();
+        return;
+    }
+    m_waitingVoiceFinishForAutoAdvance = false;
+    // 给音频状态切换留一个很短缓冲，避免极端情况下重复触发。
+    m_autoAdvanceTimer->start(120);
 }
 
 void PlayerWindow::onSettingsButtonClicked()
@@ -503,6 +541,8 @@ bool PlayerWindow::loadFromDirectory(const QString &dirPath, QString *errorMsg)
         line.bgmPath = obj.value("bgmPath").toString();
         line.voicePath = obj.value("voicePath").toString();
         line.portraitScale = obj.value("portraitScale").toInt(100);
+        line.portraitX = obj.value("portraitX").toInt(320);
+        line.portraitY = obj.value("portraitY").toInt(-60);
         line.nameFontSizeOverride = obj.value("nameFontSizeOverride").toInt(0);
         line.nameFontColorOverride = obj.value("nameFontColorOverride").toString();
         line.textFontSizeOverride = obj.value("textFontSizeOverride").toInt(0);
@@ -591,6 +631,7 @@ void PlayerWindow::renderCurrentLine()
     if (m_autoAdvanceTimer) {
         m_autoAdvanceTimer->stop();
     }
+    m_waitingVoiceFinishForAutoAdvance = false;
 
     m_typewriter.cancel();
     m_textItem->setPlainText(QString());
@@ -645,8 +686,8 @@ void PlayerWindow::renderCurrentLine()
         const int targetHeight = qMax(60, 600 * clampedScale / 100);
         const QPixmap portraitScaled = portrait.scaledToHeight(targetHeight, Qt::SmoothTransformation);
         m_portraitItem->setPixmap(portraitScaled);
-        const qreal x = (1280 - portraitScaled.width()) / 2.0;
-        const qreal y = 540.0 - portraitScaled.height();
+        const qreal x = line.portraitX;
+        const qreal y = line.portraitY;
         m_portraitItem->setPos(x, y);
         m_portraitItem->setVisible(true);
     }
@@ -859,6 +900,11 @@ bool PlayerWindow::showStartMenu(QString *errorMsg)
 void PlayerWindow::enterStartScreenState()
 {
     m_typewriter.cancel();
+    if (m_autoAdvanceTimer) {
+        m_autoAdvanceTimer->stop();
+    }
+    m_waitingVoiceFinishForAutoAdvance = false;
+    m_waitingVoiceFinishForStoryEnd = false;
     if (m_voicePlayer) {
         m_voicePlayer->stop();
     }
@@ -880,6 +926,15 @@ void PlayerWindow::enterStartScreenState()
     if (m_backgroundItem) {
         m_backgroundItem->setPixmap(QPixmap());
         m_backgroundItem->setPos(0, 0);
+    }
+}
+
+void PlayerWindow::returnToStartMenuAfterStoryEnd()
+{
+    enterStartScreenState();
+    QString error;
+    if (showStartMenu(&error)) {
+        renderCurrentLine();
     }
 }
 
@@ -1045,6 +1100,24 @@ void PlayerWindow::tryScheduleAutoAdvance()
         m_autoAdvanceTimer->stop();
         return;
     }
+
+    const RuntimeLine &line = m_script.at(m_currentIndex);
+    const QString voiceAbsPath = resolveAssetPath(line.voicePath);
+    const bool hasVoice = !voiceAbsPath.isEmpty() && QFileInfo::exists(voiceAbsPath);
+
+    if (hasVoice) {
+        if (m_voicePlayer && m_voicePlayer->playbackState() == QMediaPlayer::PlayingState) {
+            m_waitingVoiceFinishForAutoAdvance = true;
+            m_autoAdvanceTimer->stop();
+            return;
+        }
+        m_waitingVoiceFinishForAutoAdvance = false;
+        m_autoAdvanceTimer->start(120);
+        return;
+    }
+
+    // 旁白或无语音：文字结束后停 2 秒再自动进入下一句。
+    m_waitingVoiceFinishForAutoAdvance = false;
     m_autoAdvanceTimer->start(2000);
 }
 

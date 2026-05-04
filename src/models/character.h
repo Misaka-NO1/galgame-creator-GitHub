@@ -16,6 +16,8 @@ class Character : public QObject
     Q_PROPERTY(QString voicePrefix READ voicePrefix WRITE setVoicePrefix)
     Q_PROPERTY(int portraitScale READ portraitScale WRITE setPortraitScale)
     Q_PROPERTY(Position position READ position WRITE setPosition)
+    Q_PROPERTY(int portraitX READ portraitX WRITE setPortraitX)
+    Q_PROPERTY(int portraitY READ portraitY WRITE setPortraitY)
 
 public:
     enum class Position {
@@ -61,6 +63,14 @@ public:
     Position position() const;
     // 设置立绘显示位置。
     void setPosition(Position position);
+    // 获取立绘 X 坐标（以画布左上角为原点）。
+    int portraitX() const;
+    // 设置立绘 X 坐标（以画布左上角为原点）。
+    void setPortraitX(int x);
+    // 获取立绘 Y 坐标（以画布左上角为原点）。
+    int portraitY() const;
+    // 设置立绘 Y 坐标（以画布左上角为原点）。
+    void setPortraitY(int y);
 
     // 序列化角色数据到 JSON 对象。
     QJsonObject toJson() const;
@@ -77,6 +87,8 @@ private:
     QString m_voicePrefix;
     int m_portraitScale = 100;
     Position m_position = Position::Center;
+    int m_portraitX = 320;
+    int m_portraitY = -60;
 };
 
 #endif // CHARACTER_H
