@@ -178,6 +178,76 @@ void Project::setStartMenuFontColor(const QString &color)
     m_startMenuFontColor = color.trimmed().isEmpty() ? QString("#FFFFFF") : color.trimmed();
 }
 
+QString Project::startMenuTitle() const
+{
+    return m_startMenuTitle;
+}
+
+void Project::setStartMenuTitle(const QString &title)
+{
+    m_startMenuTitle = title;
+}
+
+int Project::startMenuTitleFontSize() const
+{
+    return m_startMenuTitleFontSize;
+}
+
+void Project::setStartMenuTitleFontSize(int size)
+{
+    m_startMenuTitleFontSize = qBound(8, size, 160);
+}
+
+QString Project::startMenuTitleColor() const
+{
+    return m_startMenuTitleColor;
+}
+
+void Project::setStartMenuTitleColor(const QString &color)
+{
+    m_startMenuTitleColor = color.trimmed().isEmpty() ? QString("#FFFFFF") : color.trimmed();
+}
+
+int Project::startMenuTitleX() const
+{
+    return m_startMenuTitleX;
+}
+
+void Project::setStartMenuTitleX(int x)
+{
+    m_startMenuTitleX = qMax(0, x);
+}
+
+int Project::startMenuTitleY() const
+{
+    return m_startMenuTitleY;
+}
+
+void Project::setStartMenuTitleY(int y)
+{
+    m_startMenuTitleY = qMax(0, y);
+}
+
+int Project::startMenuOptionsX() const
+{
+    return m_startMenuOptionsX;
+}
+
+void Project::setStartMenuOptionsX(int x)
+{
+    m_startMenuOptionsX = qMax(0, x);
+}
+
+int Project::startMenuOptionsY() const
+{
+    return m_startMenuOptionsY;
+}
+
+void Project::setStartMenuOptionsY(int y)
+{
+    m_startMenuOptionsY = qMax(0, y);
+}
+
 int Project::dialogueNameFontSize() const
 {
     return m_dialogueNameFontSize;
@@ -412,6 +482,13 @@ bool Project::saveToFile(const QString &path) const
     root["startMenuBgmPath"] = m_startMenuBgmPath;
     root["startMenuFontSize"] = m_startMenuFontSize;
     root["startMenuFontColor"] = m_startMenuFontColor;
+    root["startMenuTitle"] = m_startMenuTitle;
+    root["startMenuTitleFontSize"] = m_startMenuTitleFontSize;
+    root["startMenuTitleColor"] = m_startMenuTitleColor;
+    root["startMenuTitleX"] = m_startMenuTitleX;
+    root["startMenuTitleY"] = m_startMenuTitleY;
+    root["startMenuOptionsX"] = m_startMenuOptionsX;
+    root["startMenuOptionsY"] = m_startMenuOptionsY;
     root["dialogueNameFontSize"] = m_dialogueNameFontSize;
     root["dialogueNameFontColor"] = m_dialogueNameFontColor;
     root["dialogueTextFontSize"] = m_dialogueTextFontSize;
@@ -465,6 +542,13 @@ Project *Project::loadFromFile(const QString &path, QObject *parent, QString *er
     project->setStartMenuBgmPath(root.value("startMenuBgmPath").toString());
     project->setStartMenuFontSize(root.value("startMenuFontSize").toInt(22));
     project->setStartMenuFontColor(root.value("startMenuFontColor").toString("#FFFFFF"));
+    project->setStartMenuTitle(root.value("startMenuTitle").toString("Galgame"));
+    project->setStartMenuTitleFontSize(root.value("startMenuTitleFontSize").toInt(44));
+    project->setStartMenuTitleColor(root.value("startMenuTitleColor").toString("#FFFFFF"));
+    project->setStartMenuTitleX(root.value("startMenuTitleX").toInt(80));
+    project->setStartMenuTitleY(root.value("startMenuTitleY").toInt(80));
+    project->setStartMenuOptionsX(root.value("startMenuOptionsX").toInt(120));
+    project->setStartMenuOptionsY(root.value("startMenuOptionsY").toInt(520));
     project->setDialogueNameFontSize(root.value("dialogueNameFontSize").toInt(14));
     project->setDialogueNameFontColor(root.value("dialogueNameFontColor").toString("#FFFFFF"));
     project->setDialogueTextFontSize(root.value("dialogueTextFontSize").toInt(12));

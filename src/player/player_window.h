@@ -128,6 +128,13 @@ private:
     QString m_startMenuBgmPath;
     int m_startMenuFontSize = 22;
     QString m_startMenuFontColor = "#FFFFFF";
+    QString m_startMenuTitle = "Galgame";
+    int m_startMenuTitleFontSize = 44;
+    QString m_startMenuTitleColor = "#FFFFFF";
+    int m_startMenuTitleX = 80;
+    int m_startMenuTitleY = 80;
+    int m_startMenuOptionsX = 120;
+    int m_startMenuOptionsY = 520;
     QString m_autoPlayIndicatorColor = "#7CFC00";
     QString m_settingsButtonColor = "#FFFFFF";
     int m_dialogueNameFontSize = 14;

@@ -559,6 +559,13 @@ bool PlayerWindow::loadFromDirectory(const QString &dirPath, QString *errorMsg)
     const QJsonObject dialogueStyle = uiStyle.value("dialogue").toObject();
     m_startMenuFontSize = qBound(8, startStyle.value("fontSize").toInt(22), 96);
     m_startMenuFontColor = normalizeColor(startStyle.value("fontColor").toString("#FFFFFF"), "#FFFFFF");
+    m_startMenuTitle = startStyle.value("title").toString("Galgame");
+    m_startMenuTitleFontSize = qBound(8, startStyle.value("titleFontSize").toInt(44), 160);
+    m_startMenuTitleColor = normalizeColor(startStyle.value("titleColor").toString("#FFFFFF"), "#FFFFFF");
+    m_startMenuTitleX = qMax(0, startStyle.value("titleX").toInt(80));
+    m_startMenuTitleY = qMax(0, startStyle.value("titleY").toInt(80));
+    m_startMenuOptionsX = qMax(0, startStyle.value("optionsX").toInt(120));
+    m_startMenuOptionsY = qMax(0, startStyle.value("optionsY").toInt(520));
     m_autoPlayIndicatorColor = normalizeColor(startStyle.value("autoPlayIndicatorColor").toString("#7CFC00"), "#7CFC00");
     m_settingsButtonColor = normalizeColor(startStyle.value("settingsButtonColor").toString("#FFFFFF"), "#FFFFFF");
     m_dialogueNameFontSize = qBound(8, dialogueStyle.value("nameFontSize").toInt(14), 96);
@@ -635,6 +642,12 @@ void PlayerWindow::renderCurrentLine()
 
     m_typewriter.cancel();
     m_textItem->setPlainText(QString());
+    if (m_dialogBox) {
+        m_dialogBox->setVisible(true);
+    }
+    if (m_textItem) {
+        m_textItem->setVisible(true);
+    }
 
     const RuntimeLine &line = m_script.at(m_currentIndex);
     const bool isNarrator = line.characterId == QString::fromLatin1(kNarratorCharacterId);
@@ -786,11 +799,16 @@ bool PlayerWindow::showStartMenu(QString *errorMsg)
     layout->addWidget(stack);
 
     auto *mainPage = new QWidget(stack);
-    auto *mainPageLayout = new QVBoxLayout(mainPage);
-    mainPageLayout->setContentsMargins(24, 24, 24, 24);
-    mainPageLayout->setSpacing(16);
-    mainPageLayout->addStretch(1);
-    auto *mainButtonsRow = new QHBoxLayout();
+    auto *titleLabel = new QLabel(mainPage);
+    titleLabel->setText(m_startMenuTitle.trimmed().isEmpty() ? m_title : m_startMenuTitle);
+    titleLabel->setStyleSheet(QString("color:%1; font-size:%2px; font-weight:900;")
+                                  .arg(m_startMenuTitleColor)
+                                  .arg(m_startMenuTitleFontSize));
+    titleLabel->adjustSize();
+    titleLabel->move(m_startMenuTitleX, m_startMenuTitleY);
+
+    auto *buttonsContainer = new QWidget(mainPage);
+    auto *mainButtonsRow = new QHBoxLayout(buttonsContainer);
     mainButtonsRow->setContentsMargins(0, 0, 0, 0);
     mainButtonsRow->setSpacing(14);
     auto *startBtn = new QPushButton("Start", mainPage);
@@ -803,8 +821,8 @@ bool PlayerWindow::showStartMenu(QString *errorMsg)
         btn->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
         mainButtonsRow->addWidget(btn, 1);
     }
-    mainPageLayout->addLayout(mainButtonsRow);
-    mainPageLayout->addStretch(2);
+    const int buttonsWidth = qMax(420, dialog.width() - m_startMenuOptionsX - 24);
+    buttonsContainer->setGeometry(m_startMenuOptionsX, m_startMenuOptionsY, buttonsWidth, 64);
 
     auto *loadPage = new QWidget(stack);
     auto *loadPageLayout = new QVBoxLayout(loadPage);
@@ -915,9 +933,14 @@ void PlayerWindow::enterStartScreenState()
 
     if (m_textItem) {
         m_textItem->setPlainText(QString());
+        m_textItem->setVisible(false);
     }
     if (m_nameItem) {
         m_nameItem->setPlainText(QString());
+        m_nameItem->setVisible(false);
+    }
+    if (m_dialogBox) {
+        m_dialogBox->setVisible(false);
     }
     if (m_portraitItem) {
         m_portraitItem->setVisible(false);

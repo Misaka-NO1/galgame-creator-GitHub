@@ -21,6 +21,13 @@ class Project : public QObject
     Q_PROPERTY(QString startMenuBgmPath READ startMenuBgmPath WRITE setStartMenuBgmPath)
     Q_PROPERTY(int startMenuFontSize READ startMenuFontSize WRITE setStartMenuFontSize)
     Q_PROPERTY(QString startMenuFontColor READ startMenuFontColor WRITE setStartMenuFontColor)
+    Q_PROPERTY(QString startMenuTitle READ startMenuTitle WRITE setStartMenuTitle)
+    Q_PROPERTY(int startMenuTitleFontSize READ startMenuTitleFontSize WRITE setStartMenuTitleFontSize)
+    Q_PROPERTY(QString startMenuTitleColor READ startMenuTitleColor WRITE setStartMenuTitleColor)
+    Q_PROPERTY(int startMenuTitleX READ startMenuTitleX WRITE setStartMenuTitleX)
+    Q_PROPERTY(int startMenuTitleY READ startMenuTitleY WRITE setStartMenuTitleY)
+    Q_PROPERTY(int startMenuOptionsX READ startMenuOptionsX WRITE setStartMenuOptionsX)
+    Q_PROPERTY(int startMenuOptionsY READ startMenuOptionsY WRITE setStartMenuOptionsY)
     Q_PROPERTY(int dialogueNameFontSize READ dialogueNameFontSize WRITE setDialogueNameFontSize)
     Q_PROPERTY(QString dialogueNameFontColor READ dialogueNameFontColor WRITE setDialogueNameFontColor)
     Q_PROPERTY(int dialogueTextFontSize READ dialogueTextFontSize WRITE setDialogueTextFontSize)
@@ -70,6 +77,34 @@ public:
     QString startMenuFontColor() const;
     // 设置开始界面按钮字体颜色。
     void setStartMenuFontColor(const QString &color);
+    // 获取开始界面标题文本。
+    QString startMenuTitle() const;
+    // 设置开始界面标题文本。
+    void setStartMenuTitle(const QString &title);
+    // 获取开始界面标题字号。
+    int startMenuTitleFontSize() const;
+    // 设置开始界面标题字号。
+    void setStartMenuTitleFontSize(int size);
+    // 获取开始界面标题颜色。
+    QString startMenuTitleColor() const;
+    // 设置开始界面标题颜色。
+    void setStartMenuTitleColor(const QString &color);
+    // 获取开始界面标题 X 坐标。
+    int startMenuTitleX() const;
+    // 设置开始界面标题 X 坐标。
+    void setStartMenuTitleX(int x);
+    // 获取开始界面标题 Y 坐标。
+    int startMenuTitleY() const;
+    // 设置开始界面标题 Y 坐标。
+    void setStartMenuTitleY(int y);
+    // 获取开始界面选项区 X 坐标。
+    int startMenuOptionsX() const;
+    // 设置开始界面选项区 X 坐标。
+    void setStartMenuOptionsX(int x);
+    // 获取开始界面选项区 Y 坐标。
+    int startMenuOptionsY() const;
+    // 设置开始界面选项区 Y 坐标。
+    void setStartMenuOptionsY(int y);
 
     // 获取对话姓名字体大小。
     int dialogueNameFontSize() const;
@@ -171,6 +206,13 @@ private:
     QString m_startMenuBgmPath;
     int m_startMenuFontSize = 22;
     QString m_startMenuFontColor = "#FFFFFF";
+    QString m_startMenuTitle = "Galgame";
+    int m_startMenuTitleFontSize = 44;
+    QString m_startMenuTitleColor = "#FFFFFF";
+    int m_startMenuTitleX = 80;
+    int m_startMenuTitleY = 80;
+    int m_startMenuOptionsX = 120;
+    int m_startMenuOptionsY = 520;
     int m_dialogueNameFontSize = 14;
     QString m_dialogueNameFontColor = "#FFFFFF";
     int m_dialogueTextFontSize = 12;

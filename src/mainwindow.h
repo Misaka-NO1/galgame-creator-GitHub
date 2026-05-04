@@ -75,6 +75,7 @@ private slots:
     void onBrowseStartMenuBackground();
     void onBrowseStartMenuBgm();
     void onPickStartMenuFontColor();
+    void onPickStartMenuTitleColor();
     void onPickAutoPlayIndicatorColor();
     void onPickSettingsButtonColor();
     void onPickDialogueBoxColor();
@@ -160,6 +161,14 @@ private:
     QSpinBox *m_projectStartFontSizeSpin = nullptr;
     QLineEdit *m_projectStartFontColorEdit = nullptr;
     QPushButton *m_projectStartFontColorButton = nullptr;
+    QLineEdit *m_projectStartTitleEdit = nullptr;
+    QSpinBox *m_projectStartTitleFontSizeSpin = nullptr;
+    QLineEdit *m_projectStartTitleColorEdit = nullptr;
+    QPushButton *m_projectStartTitleColorButton = nullptr;
+    QSpinBox *m_projectStartTitleXSpin = nullptr;
+    QSpinBox *m_projectStartTitleYSpin = nullptr;
+    QSpinBox *m_projectStartOptionsXSpin = nullptr;
+    QSpinBox *m_projectStartOptionsYSpin = nullptr;
     QSpinBox *m_projectDialogueNameFontSizeSpin = nullptr;
     QLineEdit *m_projectDialogueNameFontColorEdit = nullptr;
     QPushButton *m_projectDialogueNameFontColorButton = nullptr;

@@ -912,6 +912,13 @@ bool Exporter::generateGameJson(const Project &project,
     QJsonObject startStyle;
     startStyle["fontSize"] = project.startMenuFontSize();
     startStyle["fontColor"] = project.startMenuFontColor();
+    startStyle["title"] = project.startMenuTitle();
+    startStyle["titleFontSize"] = project.startMenuTitleFontSize();
+    startStyle["titleColor"] = project.startMenuTitleColor();
+    startStyle["titleX"] = project.startMenuTitleX();
+    startStyle["titleY"] = project.startMenuTitleY();
+    startStyle["optionsX"] = project.startMenuOptionsX();
+    startStyle["optionsY"] = project.startMenuOptionsY();
     startStyle["autoPlayIndicatorColor"] = project.autoPlayIndicatorColor();
     startStyle["settingsButtonColor"] = project.settingsButtonColor();
     uiStyle["startMenu"] = startStyle;

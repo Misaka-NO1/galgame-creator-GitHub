@@ -685,6 +685,13 @@ void MainWindow::onProjectPropertiesChanged()
     m_project->setStartMenuBgmPath(m_projectStartBgmEdit->text().trimmed());
     m_project->setStartMenuFontSize(m_projectStartFontSizeSpin->value());
     m_project->setStartMenuFontColor(m_projectStartFontColorEdit->text().trimmed());
+    m_project->setStartMenuTitle(m_projectStartTitleEdit->text());
+    m_project->setStartMenuTitleFontSize(m_projectStartTitleFontSizeSpin->value());
+    m_project->setStartMenuTitleColor(m_projectStartTitleColorEdit->text().trimmed());
+    m_project->setStartMenuTitleX(m_projectStartTitleXSpin->value());
+    m_project->setStartMenuTitleY(m_projectStartTitleYSpin->value());
+    m_project->setStartMenuOptionsX(m_projectStartOptionsXSpin->value());
+    m_project->setStartMenuOptionsY(m_projectStartOptionsYSpin->value());
     m_project->setDialogueNameFontSize(m_projectDialogueNameFontSizeSpin->value());
     m_project->setDialogueNameFontColor(m_projectDialogueNameFontColorEdit->text().trimmed());
     m_project->setDialogueTextFontSize(m_projectDialogueTextFontSizeSpin->value());
@@ -1082,6 +1089,19 @@ void MainWindow::onPickStartMenuFontColor()
     emit dataChanged();
 }
 
+void MainWindow::onPickStartMenuTitleColor()
+{
+    const QColor picked = QColorDialog::getColor(QColor(m_projectStartTitleColorEdit->text().trimmed()),
+                                                 this,
+                                                 "选择开始界面标题颜色");
+    if (!picked.isValid()) {
+        return;
+    }
+    m_projectStartTitleColorEdit->setText(picked.name(QColor::HexRgb).toUpper());
+    onProjectPropertiesChanged();
+    emit dataChanged();
+}
+
 void MainWindow::onPickAutoPlayIndicatorColor()
 {
     const QColor picked = QColorDialog::getColor(QColor(m_projectAutoPlayIndicatorColorEdit->text().trimmed()),
@@ -1269,6 +1289,24 @@ void MainWindow::setupPropertyDock()
     projectStartFontColorRow->addWidget(m_projectStartFontColorEdit);
     projectStartFontColorRow->addWidget(m_projectStartFontColorButton);
 
+    m_projectStartTitleEdit = new QLineEdit(page0);
+    m_projectStartTitleFontSizeSpin = new QSpinBox(page0);
+    m_projectStartTitleFontSizeSpin->setRange(8, 160);
+    m_projectStartTitleFontSizeSpin->setValue(44);
+    m_projectStartTitleColorEdit = new QLineEdit(page0);
+    m_projectStartTitleColorButton = new QPushButton("取色...", page0);
+    auto *projectStartTitleColorRow = new QHBoxLayout();
+    projectStartTitleColorRow->addWidget(m_projectStartTitleColorEdit);
+    projectStartTitleColorRow->addWidget(m_projectStartTitleColorButton);
+    m_projectStartTitleXSpin = new QSpinBox(page0);
+    m_projectStartTitleYSpin = new QSpinBox(page0);
+    m_projectStartOptionsXSpin = new QSpinBox(page0);
+    m_projectStartOptionsYSpin = new QSpinBox(page0);
+    m_projectStartTitleXSpin->setRange(0, 5000);
+    m_projectStartTitleYSpin->setRange(0, 5000);
+    m_projectStartOptionsXSpin->setRange(0, 5000);
+    m_projectStartOptionsYSpin->setRange(0, 5000);
+
     m_projectDialogueNameFontSizeSpin = new QSpinBox(page0);
     m_projectDialogueNameFontSizeSpin->setRange(8, 96);
     m_projectDialogueNameFontSizeSpin->setValue(14);
@@ -1310,6 +1348,13 @@ void MainWindow::setupPropertyDock()
     projectForm->addRow("开始界面音乐", projectBgmRow);
     projectForm->addRow("开始界面字号", m_projectStartFontSizeSpin);
     projectForm->addRow("开始界面字色", projectStartFontColorRow);
+    projectForm->addRow("开始界面标题", m_projectStartTitleEdit);
+    projectForm->addRow("标题字号", m_projectStartTitleFontSizeSpin);
+    projectForm->addRow("标题颜色", projectStartTitleColorRow);
+    projectForm->addRow("标题X", m_projectStartTitleXSpin);
+    projectForm->addRow("标题Y", m_projectStartTitleYSpin);
+    projectForm->addRow("选项区X", m_projectStartOptionsXSpin);
+    projectForm->addRow("选项区Y", m_projectStartOptionsYSpin);
     projectForm->addRow("姓名字号", m_projectDialogueNameFontSizeSpin);
     projectForm->addRow("姓名字色", projectDialogueNameColorRow);
     projectForm->addRow("对白字号", m_projectDialogueTextFontSizeSpin);
@@ -1458,6 +1503,13 @@ void MainWindow::setupPropertyDock()
     connect(m_projectStartBgmEdit, &QLineEdit::textEdited, this, &MainWindow::onProjectPropertiesChanged);
     connect(m_projectStartFontSizeSpin, &QSpinBox::valueChanged, this, &MainWindow::onProjectPropertiesChanged);
     connect(m_projectStartFontColorEdit, &QLineEdit::textEdited, this, &MainWindow::onProjectPropertiesChanged);
+    connect(m_projectStartTitleEdit, &QLineEdit::textEdited, this, &MainWindow::onProjectPropertiesChanged);
+    connect(m_projectStartTitleFontSizeSpin, &QSpinBox::valueChanged, this, &MainWindow::onProjectPropertiesChanged);
+    connect(m_projectStartTitleColorEdit, &QLineEdit::textEdited, this, &MainWindow::onProjectPropertiesChanged);
+    connect(m_projectStartTitleXSpin, &QSpinBox::valueChanged, this, &MainWindow::onProjectPropertiesChanged);
+    connect(m_projectStartTitleYSpin, &QSpinBox::valueChanged, this, &MainWindow::onProjectPropertiesChanged);
+    connect(m_projectStartOptionsXSpin, &QSpinBox::valueChanged, this, &MainWindow::onProjectPropertiesChanged);
+    connect(m_projectStartOptionsYSpin, &QSpinBox::valueChanged, this, &MainWindow::onProjectPropertiesChanged);
     connect(m_projectDialogueNameFontSizeSpin, &QSpinBox::valueChanged, this, &MainWindow::onProjectPropertiesChanged);
     connect(m_projectDialogueNameFontColorEdit, &QLineEdit::textEdited, this, &MainWindow::onProjectPropertiesChanged);
     connect(m_projectDialogueTextFontSizeSpin, &QSpinBox::valueChanged, this, &MainWindow::onProjectPropertiesChanged);
@@ -1468,6 +1520,7 @@ void MainWindow::setupPropertyDock()
     connect(m_projectStartBgBrowseButton, &QPushButton::clicked, this, &MainWindow::onBrowseStartMenuBackground);
     connect(m_projectStartBgmBrowseButton, &QPushButton::clicked, this, &MainWindow::onBrowseStartMenuBgm);
     connect(m_projectStartFontColorButton, &QPushButton::clicked, this, &MainWindow::onPickStartMenuFontColor);
+    connect(m_projectStartTitleColorButton, &QPushButton::clicked, this, &MainWindow::onPickStartMenuTitleColor);
     connect(m_projectAutoPlayIndicatorColorButton, &QPushButton::clicked, this, &MainWindow::onPickAutoPlayIndicatorColor);
     connect(m_projectSettingsButtonColorButton, &QPushButton::clicked, this, &MainWindow::onPickSettingsButtonColor);
     connect(m_projectDialogueBoxColorButton, &QPushButton::clicked, this, &MainWindow::onPickDialogueBoxColor);
@@ -1477,6 +1530,13 @@ void MainWindow::setupPropertyDock()
     connect(m_projectStartBgmEdit, &QLineEdit::editingFinished, this, [this]() { emit dataChanged(); });
     connect(m_projectStartFontSizeSpin, &QSpinBox::editingFinished, this, [this]() { emit dataChanged(); });
     connect(m_projectStartFontColorEdit, &QLineEdit::editingFinished, this, [this]() { emit dataChanged(); });
+    connect(m_projectStartTitleEdit, &QLineEdit::editingFinished, this, [this]() { emit dataChanged(); });
+    connect(m_projectStartTitleFontSizeSpin, &QSpinBox::editingFinished, this, [this]() { emit dataChanged(); });
+    connect(m_projectStartTitleColorEdit, &QLineEdit::editingFinished, this, [this]() { emit dataChanged(); });
+    connect(m_projectStartTitleXSpin, &QSpinBox::editingFinished, this, [this]() { emit dataChanged(); });
+    connect(m_projectStartTitleYSpin, &QSpinBox::editingFinished, this, [this]() { emit dataChanged(); });
+    connect(m_projectStartOptionsXSpin, &QSpinBox::editingFinished, this, [this]() { emit dataChanged(); });
+    connect(m_projectStartOptionsYSpin, &QSpinBox::editingFinished, this, [this]() { emit dataChanged(); });
     connect(m_projectDialogueNameFontSizeSpin, &QSpinBox::editingFinished, this, [this]() { emit dataChanged(); });
     connect(m_projectDialogueNameFontColorEdit, &QLineEdit::editingFinished, this, [this]() { emit dataChanged(); });
     connect(m_projectDialogueTextFontSizeSpin, &QSpinBox::editingFinished, this, [this]() { emit dataChanged(); });
@@ -1644,6 +1704,13 @@ void MainWindow::refreshPropertyPage()
     m_projectStartBgmEdit->setText(m_project->startMenuBgmPath());
     m_projectStartFontSizeSpin->setValue(m_project->startMenuFontSize());
     m_projectStartFontColorEdit->setText(m_project->startMenuFontColor());
+    m_projectStartTitleEdit->setText(m_project->startMenuTitle());
+    m_projectStartTitleFontSizeSpin->setValue(m_project->startMenuTitleFontSize());
+    m_projectStartTitleColorEdit->setText(m_project->startMenuTitleColor());
+    m_projectStartTitleXSpin->setValue(m_project->startMenuTitleX());
+    m_projectStartTitleYSpin->setValue(m_project->startMenuTitleY());
+    m_projectStartOptionsXSpin->setValue(m_project->startMenuOptionsX());
+    m_projectStartOptionsYSpin->setValue(m_project->startMenuOptionsY());
     m_projectDialogueNameFontSizeSpin->setValue(m_project->dialogueNameFontSize());
     m_projectDialogueNameFontColorEdit->setText(m_project->dialogueNameFontColor());
     m_projectDialogueTextFontSizeSpin->setValue(m_project->dialogueTextFontSize());
